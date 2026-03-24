@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MashUp — Music Component Mixer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/mixer.css">
+  <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+  <!-- SVG Sprite -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <symbol id="icon-music-note" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 18V5l12-2v13"/>
+      <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+    </symbol>
+    <symbol id="icon-play" viewBox="0 0 24 24" fill="currentColor">
+      <polygon points="5,3 19,12 5,21"/>
+    </symbol>
+    <symbol id="icon-pause" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="5" y="3" width="4" height="18"/><rect x="15" y="3" width="4" height="18"/>
+    </symbol>
+    <symbol id="icon-stop" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="4" y="4" width="16" height="16" rx="2"/>
+    </symbol>
+    <symbol id="icon-volume" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" fill="currentColor"/>
+      <path d="M15.54 8.46a5 5 0 010 7.07"/>
+      <path d="M19.07 4.93a10 10 0 010 14.14"/>
+    </symbol>
+    <symbol id="icon-metronome" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2L8 22h8L12 2z"/>
+      <path d="M12 10l5-3"/>
+    </symbol>
+    <symbol id="icon-waveform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <line x1="4" y1="8" x2="4" y2="16"/><line x1="8" y1="4" x2="8" y2="20"/>
+      <line x1="12" y1="6" x2="12" y2="18"/><line x1="16" y1="4" x2="16" y2="20"/>
+      <line x1="20" y1="8" x2="20" y2="16"/>
+    </symbol>
+    <symbol id="icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+    </symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="3,6 5,6 21,6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+      <line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>
+    </symbol>
+    <symbol id="icon-drag" viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/>
+      <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
+      <circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/>
+    </symbol>
+    <symbol id="icon-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" fill="currentColor"/>
+      <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
+    </symbol>
+    <symbol id="icon-solo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" fill="currentColor"/>
+      <path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/>
+      <line x1="8" y1="23" x2="16" y2="23"/>
+    </symbol>
+    <symbol id="icon-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6,9 12,15 18,9"/>
+    </symbol>
+    <symbol id="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6,9 12,15 18,9"/>
+    </symbol>
+  </svg>
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-inner container">
+      <div class="brand">
+        <svg class="brand-icon" width="32" height="32"><use href="#icon-music-note"/></svg>
+        <h1 class="brand-name">Mash<span class="accent">Up</span></h1>
+      </div>
+      <p class="tagline">Extract. Combine. Create.</p>
+    </div>
+    <div class="header-gradient"></div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container">
+    <!-- Song Input Panel -->
+    <section class="section song-input-section" id="song-input-section">
+      <h2 class="section-title">
+        <svg width="20" height="20"><use href="#icon-plus"/></svg>
+        Add Songs
+      </h2>
+      <form class="song-input-form" id="song-input-form">
+        <div class="input-group">
+          <input
+            type="url"
+            id="url-input"
+            class="url-input"
+            placeholder="Paste a YouTube URL here..."
+            autocomplete="off"
+          >
+          <button type="submit" class="btn btn-primary" id="add-song-btn">
+            <svg width="18" height="18"><use href="#icon-plus"/></svg>
+            Add Song
+          </button>
+        </div>
+        <p class="input-hint">Supports youtube.com, youtu.be, and youtube.com/shorts URLs</p>
+      </form>
+      <div class="songs-container" id="songs-container">
+        <!-- Song cards rendered here -->
+      </div>
+    </section>
+
+    <!-- Mixer Panel -->
+    <section class="section mixer-section" id="mixer-section">
+      <h2 class="section-title">
+        <svg width="20" height="20"><use href="#icon-waveform"/></svg>
+        Mixer
+      </h2>
+      <div class="mixer-panel" id="mixer-panel">
+        <div class="mixer-tracks" id="mixer-tracks">
+          <div class="mixer-empty-state" id="mixer-empty">
+            <svg width="48" height="48" class="empty-icon"><use href="#icon-waveform"/></svg>
+            <p>Drag components here or click "Add to Mixer" to start building your mashup</p>
+          </div>
+        </div>
+        <div class="transport-bar" id="transport-bar">
+          <div class="transport-controls">
+            <button class="btn btn-icon transport-btn" id="play-btn" title="Play (Space)">
+              <svg width="20" height="20"><use href="#icon-play"/></svg>
+            </button>
+            <button class="btn btn-icon transport-btn" id="stop-btn" title="Stop">
+              <svg width="20" height="20"><use href="#icon-stop"/></svg>
+            </button>
+          </div>
+          <div class="transport-info">
+            <div class="bpm-control">
+              <svg width="16" height="16"><use href="#icon-metronome"/></svg>
+              <label for="bpm-input">BPM</label>
+              <input type="number" id="bpm-input" class="bpm-input" value="120" min="40" max="300" step="1">
+            </div>
+            <div class="time-display" id="time-display">0:00.0</div>
+          </div>
+          <div class="master-volume">
+            <svg width="16" height="16"><use href="#icon-volume"/></svg>
+            <input type="range" id="master-volume" class="range-slider" min="0" max="100" value="80">
+            <span class="volume-label" id="master-volume-label">80%</span>
+          </div>
+        </div>
+      </div>
+      <canvas id="master-waveform" class="master-waveform" width="800" height="80"></canvas>
+    </section>
+  </main>
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Modal overlay -->
+  <div class="modal-overlay" id="modal-overlay" hidden>
+    <div class="modal" id="modal">
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+        <button class="btn btn-primary" id="modal-confirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
