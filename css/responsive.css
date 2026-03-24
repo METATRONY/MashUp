@@ -1,0 +1,168 @@
+/* Tablet */
+@media (max-width: 768px) {
+  .container {
+    padding: 0 var(--space-md);
+  }
+
+  .header-inner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+  }
+
+  .brand-name {
+    font-size: 1.5rem;
+  }
+
+  .input-group {
+    flex-direction: column;
+  }
+
+  .btn-primary {
+    width: 100%;
+  }
+
+  .song-card-header {
+    flex-wrap: wrap;
+  }
+
+  .song-thumbnail {
+    width: 64px;
+    height: 48px;
+  }
+
+  .track-row {
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+  }
+
+  .track-info {
+    min-width: 100px;
+    max-width: 140px;
+  }
+
+  .track-waveform {
+    min-width: 80px;
+    order: 10;
+    flex-basis: 100%;
+  }
+
+  .track-volume {
+    width: 80px;
+  }
+
+  .transport-bar {
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    padding: var(--space-md);
+  }
+
+  .transport-info {
+    gap: var(--space-md);
+  }
+
+  .master-volume {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .master-volume .range-slider {
+    flex: 1;
+  }
+
+  .toast-container {
+    left: var(--space-md);
+    right: var(--space-md);
+    bottom: var(--space-md);
+  }
+
+  .toast {
+    max-width: 100%;
+  }
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+  :root {
+    --space-lg: 16px;
+    --space-xl: 24px;
+    --space-2xl: 32px;
+  }
+
+  .brand-name {
+    font-size: 1.25rem;
+  }
+
+  .tagline {
+    font-size: 0.75rem;
+  }
+
+  .section-title {
+    font-size: 1.0625rem;
+  }
+
+  .song-card-header {
+    padding: var(--space-sm);
+  }
+
+  .song-thumbnail {
+    width: 56px;
+    height: 42px;
+  }
+
+  .component-chips {
+    gap: 6px;
+  }
+
+  .component-chip {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+  }
+
+  .track-row {
+    padding: var(--space-sm);
+  }
+
+  .track-info {
+    min-width: 80px;
+    max-width: 120px;
+  }
+
+  .track-pan {
+    display: none;
+  }
+
+  .transport-controls .transport-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .bpm-input {
+    width: 48px;
+  }
+
+  .time-display {
+    font-size: 0.875rem;
+    padding: 4px 8px;
+  }
+
+  .modal {
+    padding: var(--space-lg);
+    width: 95%;
+  }
+}
+
+/* Large screens */
+@media (min-width: 1400px) {
+  .container {
+    max-width: 1360px;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
