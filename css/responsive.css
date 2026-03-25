@@ -1,0 +1,94 @@
+@media (max-width: 900px) {
+  .site-nav {
+    min-height: 56px;
+  }
+
+  .site-nav__actions {
+    gap: 0;
+  }
+
+  .song-card {
+    grid-template-columns: 1fr;
+  }
+
+  .song-card__media {
+    max-width: 320px;
+  }
+
+  .mixer-track__body {
+    flex: 1 1 100%;
+  }
+
+  .mixer-track__controls {
+    width: 100%;
+  }
+
+  .mixer-track__vol {
+    flex: 1 1 auto;
+    max-width: 100%;
+  }
+
+  .mixer-track__vol .range-slider {
+    max-width: none;
+    flex: 1;
+  }
+
+  .section-panel {
+    padding: var(--space-lg);
+    border-radius: var(--radius-xl);
+  }
+}
+
+@media (max-width: 600px) {
+  .container {
+    padding: 0 var(--space-md);
+  }
+
+  .hero {
+    padding: var(--space-2xl) 0 var(--space-xl);
+  }
+
+  .input-group {
+    flex-direction: column;
+  }
+
+  .input-group .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .transport-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .transport-info {
+    justify-content: space-between;
+  }
+
+  .master-volume {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .master-volume .range-slider {
+    max-width: none;
+    flex: 1;
+  }
+
+  .toast-container {
+    left: var(--space-md);
+    right: var(--space-md);
+    bottom: var(--space-md);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -6,7 +6,7 @@
   <title>MashUp — Music Component Mixer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/variables.css">
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/components.css">
@@ -14,6 +14,8 @@
   <link rel="stylesheet" href="css/responsive.css">
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+
   <!-- SVG Sprite -->
   <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
     <symbol id="icon-music-note" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -72,22 +74,34 @@
     </symbol>
   </svg>
 
-  <!-- Header -->
-  <header class="app-header">
-    <div class="header-inner container">
-      <div class="brand">
-        <svg class="brand-icon" width="32" height="32"><use href="#icon-music-note"/></svg>
-        <h1 class="brand-name">Mash<span class="accent">Up</span></h1>
+  <header class="site-header">
+    <nav class="site-nav container" aria-label="Primary">
+      <a href="#" class="site-nav__brand">
+        <svg class="site-nav__logo" width="28" height="28" aria-hidden="true"><use href="#icon-music-note"/></svg>
+        <span class="site-nav__name">Mash<span class="site-nav__accent">Up</span></span>
+      </a>
+      <div class="site-nav__actions">
+        <a class="site-nav__link" href="#song-input-section">Library</a>
+        <a class="site-nav__link" href="#mixer-section">Mixer</a>
       </div>
-      <p class="tagline">Extract. Combine. Create.</p>
+    </nav>
+
+    <div class="hero">
+      <div class="hero__inner container">
+        <p class="hero__eyebrow">Music component mixer</p>
+        <h1 class="hero__title">Bringing your mix to life</h1>
+        <p class="hero__subtitle">
+          Extract stems from YouTube, layer tracks, and shape a mashup with the clarity of a studio workspace—built for creators who care about sound.
+        </p>
+      </div>
+      <div class="hero__glow" aria-hidden="true"></div>
     </div>
-    <div class="header-gradient"></div>
   </header>
 
   <!-- Main Content -->
-  <main class="container">
+  <main class="container main-content" id="main-content">
     <!-- Song Input Panel -->
-    <section class="section song-input-section" id="song-input-section">
+    <section class="section section-panel song-input-section" id="song-input-section">
       <h2 class="section-title">
         <svg width="20" height="20"><use href="#icon-plus"/></svg>
         Add Songs
@@ -114,7 +128,7 @@
     </section>
 
     <!-- Mixer Panel -->
-    <section class="section mixer-section" id="mixer-section">
+    <section class="section section-panel mixer-section" id="mixer-section">
       <h2 class="section-title">
         <svg width="20" height="20"><use href="#icon-waveform"/></svg>
         Mixer
@@ -149,6 +163,17 @@
             <span class="volume-label" id="master-volume-label">80%</span>
           </div>
         </div>
+      </div>
+      <div class="mixer-generate-bar" id="mixer-generate-bar">
+        <p class="mixer-generate-hint" id="mixer-generate-hint"></p>
+        <div class="mixer-generate-actions">
+          <button type="button" class="btn btn-primary" id="generate-mashup-btn" disabled>
+            Generate mashup
+          </button>
+          <span class="generation-status" id="generation-status" aria-live="polite"></span>
+          <a class="btn btn-secondary" id="download-mashup-btn" href="#" download style="display: none">Download MP3</a>
+        </div>
+        <audio id="mashup-result-audio" preload="metadata" style="display: none"></audio>
       </div>
       <canvas id="master-waveform" class="master-waveform" width="800" height="80"></canvas>
     </section>
