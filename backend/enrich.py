@@ -48,10 +48,19 @@ def _extract_bpm_key(y, sr) -> dict:
 
         audio = y.astype(np.float32)
 
-        # BPM — multifeature mode is the most accurate
+        # BPM — multifeature mode; normalise to 60–140 to fix 2× octave errors
+        # (e.g. slow ballads often detected at double their real tempo)
         rhythm = es.RhythmExtractor2013(method="multifeature")
         bpm, _beats, _conf, _bpm_ests, _beat_loudness = rhythm(audio)
-        bpm = round(float(bpm), 1)
+        bpm = float(bpm)
+        for _ in range(3):
+            if bpm > 140:
+                bpm /= 2
+            elif bpm < 60:
+                bpm *= 2
+            else:
+                break
+        bpm = round(bpm, 1)
 
         # Key — dedicated harmonic pitch class profile extractor
         key_ext = es.KeyExtractor()
@@ -454,10 +463,13 @@ def enrich_video(video_id: str) -> dict:
     return result
 
 
-def _analyze_youtube_clip(video_id: str, duration: int = 45) -> dict:
+def _analyze_youtube_clip(video_id: str) -> dict:
     """
-    Download first `duration` seconds of a YouTube video via yt-dlp and
-    extract BPM + key with librosa. Returns a partial dict or empty dict.
+    Download 60 seconds of audio from a YouTube video (skipping the first 30s
+    to avoid unrepresentative intros) and extract BPM + key.
+
+    Uses 44100 Hz sample rate for better frequency resolution. Falls back to
+    librosa if Essentia is unavailable.
     """
     import sys
     import tempfile
@@ -480,7 +492,8 @@ def _analyze_youtube_clip(video_id: str, duration: int = 45) -> dict:
                     "-x",
                     "--audio-format", "wav",
                     "--audio-quality", "5",
-                    "--download-sections", f"*0-{duration}",
+                    # Skip first 30s (intro/silence), analyse next 60s of real content
+                    "--download-sections", "*30-90",
                     "--force-keyframes-at-cuts",
                     "-o", out_tmpl,
                     "--no-playlist",
@@ -488,13 +501,25 @@ def _analyze_youtube_clip(video_id: str, duration: int = 45) -> dict:
                 ],
                 capture_output=True,
                 text=True,
-                timeout=90,
+                timeout=120,
             )
             wavs = list(_P(tmpdir).glob("*.wav"))
             if not wavs:
-                return {}
+                # Song may be shorter than 30s — fall back to the beginning
+                _sp.run(
+                    [ytdlp, f"https://www.youtube.com/watch?v={video_id}",
+                     "-x", "--audio-format", "wav", "--audio-quality", "5",
+                     "--download-sections", "*0-60",
+                     "--force-keyframes-at-cuts", "-o", out_tmpl,
+                     "--no-playlist", "--quiet"],
+                    capture_output=True, text=True, timeout=120,
+                )
+                wavs = list(_P(tmpdir).glob("*.wav"))
+                if not wavs:
+                    return {}
 
-            y, sr = librosa.load(str(wavs[0]), sr=22050, mono=True)
+            # 44100 Hz gives better frequency resolution than 22050 Hz
+            y, sr = librosa.load(str(wavs[0]), sr=44100, mono=True)
 
         return _extract_bpm_key(y, sr)
     except Exception as exc:
