@@ -229,3 +229,25 @@ input {
   white-space: nowrap;
   border: 0;
 }
+
+.site-footer {
+  margin-top: auto;
+  padding: var(--space-md) 0;
+  border-top: 1px solid var(--border);
+}
+
+.site-footer__inner {
+  display: flex;
+  justify-content: center;
+}
+
+.site-footer__attr {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.site-footer__attr a {
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

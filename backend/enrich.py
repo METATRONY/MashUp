@@ -252,9 +252,19 @@ def get_song_bpm(artist: str, title: str) -> dict | None:
     if not api_key:
         return None
 
+    # GetSongBPM free tier requires a backlink URL pointing to your site
+    # that displays their attribution badge (see index.html footer).
+    backlink = os.environ.get("GETSONGBPM_BACKLINK", "https://metatrony.github.io/MashUp")
+
     try:
         lookup = urllib.parse.quote_plus(f"{artist} {title}".strip())
-        url = f"https://api.getsongbpm.com/search/?api_key={api_key}&type=song&lookup={lookup}"
+        url = (
+            f"https://api.getsongbpm.com/search/"
+            f"?api_key={api_key}"
+            f"&type=song"
+            f"&lookup={lookup}"
+            f"&backlink={urllib.parse.quote_plus(backlink)}"
+        )
         req = urllib.request.Request(url, headers={"User-Agent": "MashUp/1.0"})
         with urllib.request.urlopen(req, timeout=8) as resp:
             data = json.loads(resp.read().decode())
