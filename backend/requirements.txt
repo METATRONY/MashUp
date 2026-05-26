@@ -13,4 +13,5 @@ python-dotenv>=1.0.0
 spotipy>=2.23.0
 lyricsgenius>=3.0.1
 librosa>=0.10.0
+essentia>=2.1b6  # better BPM (RhythmExtractor2013) and key (KeyExtractor) than librosa
 mido>=1.3.0

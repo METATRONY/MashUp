@@ -18,6 +18,85 @@ logger = logging.getLogger(__name__)
 
 KEY_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
+# Krumhansl-Schmuckler key profiles (librosa fallback only).
+_KS_MAJOR = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
+_KS_MINOR = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
+
+# Maps Essentia enharmonic key names to Spotify key integers (0=C … 11=B)
+_ESSENTIA_KEY_MAP = {
+    "C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3,
+    "E": 4, "F": 5, "F#": 6, "Gb": 6, "G": 7, "G#": 8,
+    "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11,
+}
+
+
+def _extract_bpm_key(y, sr) -> dict:
+    """
+    Extract BPM and key from a mono audio array.
+
+    Tries Essentia first (RhythmExtractor2013 + KeyExtractor) — these are
+    the algorithms that powered AcousticBrainz and are significantly more
+    accurate than librosa on real music.  Falls back to librosa with
+    Krumhansl-Schmuckler profiles + harmonic separation if Essentia is not
+    installed.
+    """
+    import numpy as np
+
+    # ── Essentia path (preferred) ──────────────────────────────────────────
+    try:
+        import essentia.standard as es
+
+        audio = y.astype(np.float32)
+
+        # BPM — multifeature mode is the most accurate
+        rhythm = es.RhythmExtractor2013(method="multifeature")
+        bpm, _beats, _conf, _bpm_ests, _beat_loudness = rhythm(audio)
+        bpm = round(float(bpm), 1)
+
+        # Key — dedicated harmonic pitch class profile extractor
+        key_ext = es.KeyExtractor()
+        key_str, scale, _strength = key_ext(audio)
+        key_idx = _ESSENTIA_KEY_MAP.get(key_str, -1)
+        mode = 1 if scale == "major" else 0
+        key_name = f"{key_str} {scale}" if key_idx >= 0 else None
+
+        return {
+            "bpm": bpm,
+            "key": key_idx if key_idx >= 0 else None,
+            "key_name": key_name,
+            "mode": mode,
+        }
+    except ImportError:
+        pass  # Essentia not installed — use librosa fallback
+    except Exception as exc:
+        logger.warning("Essentia analysis failed, falling back to librosa: %s", exc)
+
+    # ── librosa fallback ───────────────────────────────────────────────────
+    import librosa
+
+    tempo_arr, _ = librosa.beat.beat_track(y=y, sr=sr, start_bpm=90)
+    bpm = float(np.atleast_1d(tempo_arr)[0])
+    for _ in range(3):
+        if bpm > 150:
+            bpm /= 2
+        elif bpm < 60:
+            bpm *= 2
+        else:
+            break
+    bpm = round(bpm, 1)
+
+    y_harm = librosa.effects.harmonic(y, margin=8)
+    chroma = np.mean(librosa.feature.chroma_cqt(y=y_harm, sr=sr), axis=1)
+    ks_maj = np.array(_KS_MAJOR)
+    ks_min = np.array(_KS_MINOR)
+    major_scores = [np.corrcoef(np.roll(chroma, -i), ks_maj)[0, 1] for i in range(12)]
+    minor_scores = [np.corrcoef(np.roll(chroma, -i), ks_min)[0, 1] for i in range(12)]
+    bm = int(np.argmax(major_scores))
+    bn = int(np.argmax(minor_scores))
+    key_idx, mode = (bm, 1) if major_scores[bm] >= minor_scores[bn] else (bn, 0)
+    key_name = f"{KEY_NAMES[key_idx]} {'major' if mode == 1 else 'minor'}"
+    return {"bpm": bpm, "key": key_idx, "key_name": key_name, "mode": mode}
+
 # Noise tokens stripped from YouTube titles before parsing
 _NOISE_RE = re.compile(
     r"""
@@ -98,9 +177,7 @@ def _analyze_preview(preview_url: str) -> dict:
     try:
         import os
         import tempfile
-
         import librosa
-        import numpy as np
 
         req = urllib.request.Request(preview_url, headers={"User-Agent": "MashUp/1.0"})
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as fh:
@@ -113,22 +190,7 @@ def _analyze_preview(preview_url: str) -> dict:
         finally:
             os.unlink(tmp)
 
-        tempo_arr, _ = librosa.beat.beat_track(y=y, sr=sr)
-        bpm = round(float(np.atleast_1d(tempo_arr)[0]), 1)
-
-        chroma = np.mean(librosa.feature.chroma_cqt(y=y, sr=sr), axis=1)
-        major_tmpl = np.array([1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0], dtype=float)
-        minor_tmpl = np.array([1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0], dtype=float)
-        major_scores = [np.dot(np.roll(chroma, -i), major_tmpl) for i in range(12)]
-        minor_scores = [np.dot(np.roll(chroma, -i), minor_tmpl) for i in range(12)]
-        bm = int(np.argmax(major_scores))
-        bn = int(np.argmax(minor_scores))
-        if major_scores[bm] >= minor_scores[bn]:
-            key_idx, mode = bm, 1
-        else:
-            key_idx, mode = bn, 0
-        key_name = f"{KEY_NAMES[key_idx]} {'major' if mode == 1 else 'minor'}"
-        return {"bpm": bpm, "key": key_idx, "key_name": key_name, "mode": mode}
+        return _extract_bpm_key(y, sr)
     except Exception as exc:
         logger.warning("Preview analysis failed: %s", exc)
         return {}
@@ -277,13 +339,44 @@ def fetch_oembed_title(video_id: str) -> str:
         return ""
 
 
+def _yt_title_matches_track(yt_title: str, sp_artist: str, sp_title: str) -> bool:
+    """
+    Return True if the YouTube video title is plausibly consistent with the
+    Spotify-confirmed artist and song title.
+
+    We check that at least one significant word from the Spotify artist AND
+    one significant word from the Spotify title appear in the YouTube title.
+    Short/common words (≤3 chars) are skipped to avoid false positives.
+    """
+    if not yt_title or not sp_artist or not sp_title:
+        return True  # Can't check; assume OK
+
+    yt = yt_title.lower()
+    sig = lambda s: [w.lower() for w in s.split() if len(w) > 3]
+
+    artist_words = sig(sp_artist)
+    title_words = sig(sp_title)
+
+    artist_ok = not artist_words or any(w in yt for w in artist_words)
+    title_ok = not title_words or any(w in yt for w in title_words)
+    return artist_ok and title_ok
+
+
 def enrich_video(video_id: str) -> dict:
     """
     Full enrichment pipeline for a YouTube video ID.
 
+    Cross-validates the YouTube video against the Spotify-matched track.
+    If the video title doesn't match the Spotify artist/title (e.g. the user
+    pasted the wrong URL), audio analysis falls back to searching YouTube for
+    the canonical version of the Spotify-confirmed song — preventing BPM/key
+    data from a completely different song corrupting the card.
+
     Returns a dict suitable for the /api/enrich response.
     All fields are present; unknown values are None.
     """
+    from .catalog import search_yt_video_id
+
     yt_title = fetch_oembed_title(video_id)
     artist, title = parse_artist_title(yt_title) if yt_title else ("", "")
 
@@ -305,9 +398,16 @@ def enrich_video(video_id: str) -> dict:
         "lyrics_full": None,
     }
 
+    # The video ID we'll actually download for audio analysis.
+    # Starts as the user's pasted video; may be replaced by a canonical search.
+    audio_vid = video_id
+
     if title:
         spotify = search_spotify(artist, title)
         if spotify:
+            sp_artist = spotify.get("spotify_artist") or artist
+            sp_title = spotify.get("spotify_title") or title
+
             result.update(
                 {
                     "bpm": spotify["bpm"],
@@ -319,10 +419,23 @@ def enrich_video(video_id: str) -> dict:
                     "danceability": spotify["danceability"],
                     "album_art": spotify["album_art"],
                     "spotify_id": spotify["spotify_id"],
-                    "artist": spotify.get("spotify_artist") or artist or None,
-                    "title": spotify.get("spotify_title") or title or None,
+                    "artist": sp_artist or None,
+                    "title": sp_title or None,
                 }
             )
+
+            # Cross-validate: does the user's YouTube video match what Spotify found?
+            # If not, find the canonical YouTube video for the confirmed track so we
+            # don't run audio analysis on a completely different song.
+            if not _yt_title_matches_track(yt_title or "", sp_artist, sp_title):
+                logger.warning(
+                    "YouTube title %r doesn't match Spotify track %r – %r; "
+                    "searching for canonical video for audio analysis.",
+                    yt_title, sp_artist, sp_title,
+                )
+                canonical = search_yt_video_id(sp_artist, sp_title)
+                if canonical:
+                    audio_vid = canonical
 
         effective_artist = result["artist"] or artist
         effective_title = result["title"] or title
@@ -334,10 +447,9 @@ def enrich_video(video_id: str) -> dict:
         result["lyrics_full"] = lyrics
         result["lyrics_snippet"] = _lyrics_snippet(lyrics)
 
-    # If BPM/key still missing (no Spotify preview, or Spotify unavailable),
-    # download a 45-second YouTube clip and analyze with librosa
+    # If BPM/key still missing, analyse the correct video (canonical if mismatch detected)
     if result["bpm"] is None:
-        result.update(_analyze_youtube_clip(video_id))
+        result.update(_analyze_youtube_clip(audio_vid))
 
     return result
 
@@ -358,11 +470,10 @@ def _analyze_youtube_clip(video_id: str, duration: int = 45) -> dict:
 
     try:
         import librosa
-        import numpy as np
 
         with tempfile.TemporaryDirectory() as tmpdir:
             out_tmpl = str(_P(tmpdir) / "clip.%(ext)s")
-            result = _sp.run(
+            _sp.run(
                 [
                     ytdlp,
                     f"https://www.youtube.com/watch?v={video_id}",
@@ -385,19 +496,7 @@ def _analyze_youtube_clip(video_id: str, duration: int = 45) -> dict:
 
             y, sr = librosa.load(str(wavs[0]), sr=22050, mono=True)
 
-        tempo_arr, _ = librosa.beat.beat_track(y=y, sr=sr)
-        bpm = round(float(np.atleast_1d(tempo_arr)[0]), 1)
-
-        chroma = np.mean(librosa.feature.chroma_cqt(y=y, sr=sr), axis=1)
-        major_tmpl = np.array([1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0], dtype=float)
-        minor_tmpl = np.array([1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0], dtype=float)
-        major_s = [np.dot(np.roll(chroma, -i), major_tmpl) for i in range(12)]
-        minor_s = [np.dot(np.roll(chroma, -i), minor_tmpl) for i in range(12)]
-        bm, bn = int(np.argmax(major_s)), int(np.argmax(minor_s))
-        key_idx, mode = (bm, 1) if major_s[bm] >= minor_s[bn] else (bn, 0)
-        key_name = f"{KEY_NAMES[key_idx]} {'major' if mode == 1 else 'minor'}"
-
-        return {"bpm": bpm, "key": key_idx, "key_name": key_name, "mode": mode}
+        return _extract_bpm_key(y, sr)
     except Exception as exc:
         logger.warning("YouTube clip BPM analysis failed: %s", exc)
         return {}

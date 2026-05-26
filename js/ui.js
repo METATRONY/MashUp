@@ -208,10 +208,17 @@ function buildSongCard(song, store) {
   card.draggable = true;
   card.dataset.songId = song.id;
 
+  // energy != null means Spotify audio_features gave us exact data;
+  // if null, BPM/key are estimated by librosa (mark with ~ prefix)
+  const isEstimated = song.energy == null && (song.bpm != null || song.keyName != null);
+  const estimatedTip = isEstimated ? ' title="Estimated via audio analysis — Spotify exact data unavailable"' : '';
+  const bpmDisplay = song.bpm ? `${isEstimated ? '~' : ''}${song.bpm} BPM` : '';
+  const keyDisplay = song.keyName ? `${isEstimated ? '~' : ''}${escapeHtml(song.keyName)}` : '';
+
   const coverMetaHtml = (song.bpm || song.keyName)
     ? `<div class="song-card__cover-meta">
-        ${song.bpm ? `<span class="song-card__cover-badge song-card__cover-badge--bpm">${song.bpm} BPM</span>` : ''}
-        ${song.keyName ? `<span class="song-card__cover-badge song-card__cover-badge--key">${escapeHtml(song.keyName)}</span>` : ''}
+        ${song.bpm ? `<span class="song-card__cover-badge song-card__cover-badge--bpm${isEstimated ? ' song-card__cover-badge--est' : ''}"${estimatedTip}>${bpmDisplay}</span>` : ''}
+        ${song.keyName ? `<span class="song-card__cover-badge song-card__cover-badge--key${isEstimated ? ' song-card__cover-badge--est' : ''}"${estimatedTip}>${keyDisplay}</span>` : ''}
        </div>`
     : '';
 
@@ -241,8 +248,9 @@ function buildSongCard(song, store) {
         Listen on YouTube
       </a>` : ''}
       <div class="song-card__badges">
-        ${song.bpm ? `<span class="song-card__badge song-card__badge--bpm">${song.bpm} BPM</span>` : ''}
-        ${song.keyName ? `<span class="song-card__badge song-card__badge--key">${escapeHtml(song.keyName)}</span>` : ''}
+        ${song.bpm ? `<span class="song-card__badge song-card__badge--bpm"${estimatedTip}>${bpmDisplay}</span>` : ''}
+        ${song.keyName ? `<span class="song-card__badge song-card__badge--key"${estimatedTip}>${keyDisplay}</span>` : ''}
+        ${isEstimated ? `<span class="song-card__badge song-card__badge--est"${estimatedTip}>est.</span>` : ''}
       </div>
       ${suggestHtml}
       ${lyricsHtml}

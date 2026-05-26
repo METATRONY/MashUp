@@ -269,6 +269,11 @@
   color: #fff;
 }
 
+.song-card__cover-badge--est {
+  opacity: 0.72;
+  font-style: italic;
+}
+
 /* Actions overlay on hover */
 .song-card__cover-actions {
   position: absolute;
@@ -421,6 +426,15 @@
   background: var(--accent-violet-dim);
   color: var(--accent-violet);
   border: 1px solid rgba(109, 40, 217, 0.2);
+}
+
+.song-card__badge--est {
+  background: rgba(120, 113, 108, 0.15);
+  color: var(--text-muted);
+  border: 1px solid rgba(120, 113, 108, 0.25);
+  font-style: italic;
+  font-size: 0.7rem;
+  cursor: help;
 }
 
 .song-card__suggested {
