@@ -178,43 +178,16 @@ def _spotify_client():
         return None
 
 
-def _analyze_preview(preview_url: str) -> dict:
-    """
-    Download a Spotify 30-second preview MP3 and extract BPM + key via librosa.
-    Returns a partial dict (bpm, key, key_name, mode); empty dict on failure.
-    """
-    try:
-        import os
-        import tempfile
-        import librosa
-
-        req = urllib.request.Request(preview_url, headers={"User-Agent": "MashUp/1.0"})
-        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as fh:
-            tmp = fh.name
-        try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                with open(tmp, "wb") as fh:
-                    fh.write(resp.read())
-            y, sr = librosa.load(tmp, sr=22050, mono=True)
-        finally:
-            os.unlink(tmp)
-
-        return _extract_bpm_key(y, sr)
-    except Exception as exc:
-        logger.warning("Preview analysis failed: %s", exc)
-        return {}
-
-
 def search_spotify(artist: str, title: str) -> dict | None:
     """
-    Search Spotify for the track and return audio features + album art.
+    Search Spotify for the track and return album art + confirmed metadata.
 
-    The Spotify audio_features endpoint is deprecated for new app registrations
-    (returns 403). We gracefully fall back to analyzing the 30-second preview
-    clip with librosa for BPM + key when audio_features is unavailable.
+    NOTE: audio_features is permanently 403 for new Spotify app registrations.
+    We no longer attempt it. Spotify is used solely for album art and canonical
+    artist/title. BPM and key are sourced from GetSongBPM (see get_song_bpm)
+    or Essentia local analysis.
 
-    Returns a dict with keys: bpm, key, key_name, mode, energy, valence,
-    danceability, album_art, spotify_id — or None on failure.
+    Returns a dict with: album_art, spotify_id, spotify_artist, spotify_title.
     """
     sp = _spotify_client()
     if sp is None:
@@ -231,58 +204,83 @@ def search_spotify(artist: str, title: str) -> dict | None:
             return None
 
         track = items[0]
-        track_id = track["id"]
-        preview_url = track.get("preview_url")
-
         images = track.get("album", {}).get("images", [])
-        album_art = images[0]["url"] if images else None
-
-        result: dict = {
-            "bpm": None,
-            "key": None,
-            "key_name": None,
-            "mode": None,
-            "energy": None,
-            "valence": None,
-            "danceability": None,
-            "album_art": album_art,
-            "spotify_id": track_id,
+        return {
+            "album_art": images[0]["url"] if images else None,
+            "spotify_id": track["id"],
             "spotify_artist": track.get("artists", [{}])[0].get("name", "") or artist,
             "spotify_title": track.get("name", title),
         }
-
-        # Try Spotify audio_features (works on older app registrations; 403 on newer ones)
-        try:
-            features = sp.audio_features([track_id])
-            if features and features[0]:
-                f = features[0]
-                key_idx = f.get("key", -1)
-                mode = f.get("mode", 1)
-                result.update(
-                    {
-                        "bpm": round(f.get("tempo", 0), 1),
-                        "key": key_idx,
-                        "key_name": (
-                            f"{KEY_NAMES[key_idx]} {'major' if mode == 1 else 'minor'}"
-                            if 0 <= key_idx <= 11
-                            else None
-                        ),
-                        "mode": mode,
-                        "energy": round(f.get("energy", 0), 3),
-                        "valence": round(f.get("valence", 0), 3),
-                        "danceability": round(f.get("danceability", 0), 3),
-                    }
-                )
-        except Exception:
-            pass  # 403 for new Spotify app registrations — fall through to preview analysis
-
-        # If we still have no BPM/key, analyze the 30-second preview with librosa
-        if result["bpm"] is None and preview_url:
-            result.update(_analyze_preview(preview_url))
-
-        return result
     except Exception as exc:
         logger.warning("Spotify search failed: %s", exc)
+        return None
+
+
+# Maps GetSongBPM / Essentia key strings to Spotify key integers (0=C … 11=B)
+_KEY_NAME_MAP = {
+    "C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3,
+    "E": 4, "F": 5, "F#": 6, "Gb": 6, "G": 7, "G#": 8,
+    "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11,
+}
+
+
+def _parse_key_string(key_str: str) -> tuple[int, int] | None:
+    """
+    Parse a key string like "Fm", "C#m", "Ab", "D" into (key_idx, mode).
+    mode=0 minor, mode=1 major. Returns None on failure.
+    """
+    if not key_str:
+        return None
+    s = key_str.strip()
+    is_minor = s.endswith("m")
+    note = s[:-1] if is_minor else s
+    idx = _KEY_NAME_MAP.get(note)
+    if idx is None:
+        return None
+    return idx, (0 if is_minor else 1)
+
+
+def get_song_bpm(artist: str, title: str) -> dict | None:
+    """
+    Look up exact BPM and key from the GetSongBPM API.
+
+    Requires GETSONGBPM_API_KEY in environment. Free tier covers most
+    mainstream songs. Returns a dict with bpm, key, key_name, mode, or
+    None if the key is missing / song not found.
+    """
+    api_key = os.environ.get("GETSONGBPM_API_KEY", "")
+    if not api_key:
+        return None
+
+    try:
+        lookup = urllib.parse.quote_plus(f"{artist} {title}".strip())
+        url = f"https://api.getsongbpm.com/search/?api_key={api_key}&type=song&lookup={lookup}"
+        req = urllib.request.Request(url, headers={"User-Agent": "MashUp/1.0"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode())
+
+        songs = data.get("search") or []
+        if not songs:
+            return None
+
+        song = songs[0]
+        bpm = song.get("tempo")
+        key_str = song.get("key_of", "")
+
+        if not bpm:
+            return None
+
+        bpm = round(float(bpm), 1)
+        parsed = _parse_key_string(key_str)
+        if parsed is None:
+            return {"bpm": bpm, "key": None, "key_name": None, "mode": None}
+
+        key_idx, mode = parsed
+        key_name = f"{KEY_NAMES[key_idx]} {'major' if mode == 1 else 'minor'}"
+        return {"bpm": bpm, "key": key_idx, "key_name": key_name, "mode": mode}
+
+    except Exception as exc:
+        logger.warning("GetSongBPM lookup failed: %s", exc)
         return None
 
 
@@ -412,30 +410,20 @@ def enrich_video(video_id: str) -> dict:
     audio_vid = video_id
 
     if title:
+        # ── Step 1: Spotify — metadata only (album art + confirmed artist/title) ──
         spotify = search_spotify(artist, title)
         if spotify:
             sp_artist = spotify.get("spotify_artist") or artist
             sp_title = spotify.get("spotify_title") or title
 
-            result.update(
-                {
-                    "bpm": spotify["bpm"],
-                    "key": spotify["key"],
-                    "key_name": spotify["key_name"],
-                    "mode": spotify["mode"],
-                    "energy": spotify["energy"],
-                    "valence": spotify["valence"],
-                    "danceability": spotify["danceability"],
-                    "album_art": spotify["album_art"],
-                    "spotify_id": spotify["spotify_id"],
-                    "artist": sp_artist or None,
-                    "title": sp_title or None,
-                }
-            )
+            result.update({
+                "album_art": spotify["album_art"],
+                "spotify_id": spotify["spotify_id"],
+                "artist": sp_artist or None,
+                "title": sp_title or None,
+            })
 
-            # Cross-validate: does the user's YouTube video match what Spotify found?
-            # If not, find the canonical YouTube video for the confirmed track so we
-            # don't run audio analysis on a completely different song.
+            # Cross-validate: does the user's YouTube video match Spotify's result?
             if not _yt_title_matches_track(yt_title or "", sp_artist, sp_title):
                 logger.warning(
                     "YouTube title %r doesn't match Spotify track %r – %r; "
@@ -449,14 +437,27 @@ def enrich_video(video_id: str) -> dict:
         effective_artist = result["artist"] or artist
         effective_title = result["title"] or title
 
+        # ── Step 2: GetSongBPM — exact BPM + key from crowdsourced database ──
+        bpm_data = get_song_bpm(effective_artist, effective_title)
+        if bpm_data:
+            result.update({
+                "bpm": bpm_data["bpm"],
+                "key": bpm_data["key"],
+                "key_name": bpm_data["key_name"],
+                "mode": bpm_data["mode"],
+            })
+            logger.info("GetSongBPM: %s – %s → %s BPM %s",
+                        effective_artist, effective_title,
+                        bpm_data["bpm"], bpm_data["key_name"])
+
+        # ── Step 3: Lyrics ──────────────────────────────────────────────────
         lyrics = get_lyrics_genius(effective_artist, effective_title)
         if lyrics is None:
             lyrics = get_lyrics_lrclib(effective_artist, effective_title)
-
         result["lyrics_full"] = lyrics
         result["lyrics_snippet"] = _lyrics_snippet(lyrics)
 
-    # If BPM/key still missing, analyse the correct video (canonical if mismatch detected)
+    # ── Step 4: Essentia local analysis — fallback if GetSongBPM had no data ──
     if result["bpm"] is None:
         result.update(_analyze_youtube_clip(audio_vid))
 

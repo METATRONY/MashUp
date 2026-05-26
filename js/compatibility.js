@@ -1,13 +1,66 @@
 /**
  * Pure compatibility scoring functions — no DOM, no store.
  *
- * Uses Spotify audio feature data (key 0-11, mode 0/1, bpm, energy,
- * danceability, valence) stored in song objects after enrichment.
+ * Uses key (0-11), mode (0=minor/1=major), bpm, energy, danceability, valence.
  */
 
-// Circle of fifths positions for major keys (index = Spotify key integer, value = CoF position)
+// ── Camelot Wheel ────────────────────────────────────────────────────────────
+// Maps (key_idx * 2 + mode) to Camelot notation.
+// Minor keys = A, Major keys = B. Numbers follow the circle of fifths.
+//
+// Camelot #:  1   2   3   4   5   6   7   8   9  10  11  12
+// Minor (A): Ab  Eb  Bb   F   C   G   D   A   E   B  F#  C#
+// Major (B):  B  F#  Db  Ab  Eb  Bb   F   C   G   D   A   E
+//
+// Encoded as [key_idx][mode] → camelot number (1-12)
+const _CAM_NUM = [
+  //  min maj  (key index 0=C … 11=B)
+  [5,  8],  // 0  C
+  [12, 3],  // 1  C#/Db
+  [7,  10], // 2  D
+  [2,  5],  // 3  D#/Eb
+  [9,  12], // 4  E
+  [4,  7],  // 5  F
+  [11, 2],  // 6  F#/Gb
+  [6,  9],  // 7  G
+  [1,  4],  // 8  G#/Ab
+  [8,  11], // 9  A
+  [3,  6],  // 10 A#/Bb
+  [10, 1],  // 11 B
+];
+
+/**
+ * Convert a Spotify key integer + mode to Camelot notation.
+ * @param {number|null} key  0–11
+ * @param {number|null} mode 0=minor, 1=major
+ * @returns {string|null}  e.g. "4A", "8B"
+ */
+export function toCamelot(key, mode) {
+  if (key == null || key < 0 || mode == null) return null;
+  const num = _CAM_NUM[key % 12][mode === 1 ? 1 : 0];
+  return `${num}${mode === 1 ? 'B' : 'A'}`;
+}
+
+/**
+ * Camelot distance between two songs (0 = perfect match, 1 = adjacent,
+ * 2+ = increasing clash).  Same-number A↔B (relative minor/major) = 1.
+ * @returns {number} 0–6
+ */
+export function camelotDistance(key1, mode1, key2, mode2) {
+  if (key1 == null || key2 == null) return 3;
+  const n1 = _CAM_NUM[key1 % 12][mode1 === 1 ? 1 : 0];
+  const n2 = _CAM_NUM[key2 % 12][mode2 === 1 ? 1 : 0];
+  // Same number, different letter = relative major/minor = distance 1
+  if (n1 === n2 && mode1 !== mode2) return 1;
+  // Both same = perfect
+  if (n1 === n2 && mode1 === mode2) return 0;
+  // Circular distance on the 12-position wheel
+  const diff = Math.abs(n1 - n2);
+  return Math.min(diff, 12 - diff);
+}
+
+// Circle of fifths positions (kept for backward compat with circleOfFifthsDistance)
 const COF_MAJOR = [0, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10, 5];
-// Relative minor sits 3 semitones below its parallel major — adjust CoF position by -3 (mod 12)
 const COF_MINOR = COF_MAJOR.map((pos) => (pos + 9) % 12);
 
 /**
@@ -43,23 +96,21 @@ export function keyCompatibility(songs) {
   }
 
   let maxDist = 0;
-  let worstPair = null;
   for (let i = 0; i < keyed.length; i++) {
     for (let j = i + 1; j < keyed.length; j++) {
-      const d = circleOfFifthsDistance(keyed[i].key, keyed[i].mode, keyed[j].key, keyed[j].mode);
-      if (d > maxDist) {
-        maxDist = d;
-        worstPair = [keyed[i], keyed[j]];
-      }
+      const d = camelotDistance(keyed[i].key, keyed[i].mode, keyed[j].key, keyed[j].mode);
+      if (d > maxDist) maxDist = d;
     }
   }
 
-  const keyNames = keyed.map((s) => s.keyName).filter(Boolean).join(' × ');
-  const detail = keyNames ? `${keyNames}` : '';
+  // Show Camelot notations in the detail string
+  const cams = keyed.map((s) => toCamelot(s.key, s.mode)).filter(Boolean).join(' × ');
+  const detail = cams;
 
-  if (maxDist <= 2) return { label: 'Compatible', colorClass: 'compat--good', detail };
-  if (maxDist <= 4) return { label: 'Caution', colorClass: 'compat--warn', detail };
-  return { label: 'Clashing', colorClass: 'compat--bad', detail };
+  if (maxDist === 0) return { label: 'Perfect match', colorClass: 'compat--good', detail };
+  if (maxDist === 1) return { label: 'Compatible', colorClass: 'compat--good', detail };
+  if (maxDist === 2) return { label: 'At pitch limit (±2 semitones)', colorClass: 'compat--warn', detail };
+  return { label: 'Clashing — pitch shift would distort', colorClass: 'compat--bad', detail };
 }
 
 /**

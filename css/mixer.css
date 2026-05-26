@@ -417,6 +417,11 @@
   font-weight: 500;
 }
 
+.bpm-warning--soft {
+  color: #78350f;
+  opacity: 0.8;
+}
+
 /* Per-track BPM stretch row */
 .track-bpm-row {
   display: flex;

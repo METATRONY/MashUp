@@ -40,7 +40,7 @@ from .catalog import load_catalog, search_yt_video_id
 from .mapping import build_nine_stems
 from .mix_audio import assemble_mix, wav_to_mp3, write_wav
 from .separate import run_demucs
-from .tempo_match import detect_bpm, time_stretch_stems
+from .tempo_match import detect_bpm, time_stretch_stems, pitch_shift_stems, semitone_distance
 
 OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
 OUTPUT_DIR.mkdir(exist_ok=True)
@@ -96,6 +96,8 @@ class TrackIn(BaseModel):
     components: list[str]
     volume: float = 1.0
     muted: bool = False
+    key: int | None = None    # Spotify key integer 0-11; None if unknown
+    mode: int | None = None   # 1=major, 0=minor; None if unknown
 
 
 class MashupRequest(BaseModel):
@@ -135,6 +137,21 @@ def run_pipeline(job_id: str, payload: dict) -> None:
 
         target_bpm = max(30.0, min(300.0, float(req.bpm)))
 
+        # Determine the reference key for pitch shifting:
+        # Use the track that claims "vocals" (vocal track sets the key standard).
+        # If no track has vocals, use the first track with known key data.
+        ref_key: int | None = None
+        vocal_track = next(
+            (t for t in req.tracks if "vocals" in t.components and t.key is not None),
+            None,
+        )
+        if vocal_track:
+            ref_key = vocal_track.key
+        else:
+            first_keyed = next((t for t in req.tracks if t.key is not None), None)
+            if first_keyed:
+                ref_key = first_keyed.key
+
         for t in req.tracks:
             tdir = work / "dl" / t.track_id
             wav = download_youtube_audio(t.video_id.strip(), tdir)
@@ -146,21 +163,31 @@ def run_pipeline(job_id: str, payload: dict) -> None:
             chords = extract_chords(wav)
             midi_out_dir = OUTPUT_DIR / job_id / t.track_id
             midi_path = audio_to_midi(wav, midi_out_dir)
-            track_analysis.append(
-                {
-                    "track_id": t.track_id,
-                    "detected_bpm": detected_bpm,
-                    "chords": chords,
-                    "midi_path": str(midi_path) if midi_path else None,
-                }
-            )
 
             sep_root = work / "sep" / t.track_id
             stem_dir = run_demucs(wav, sep_root)
             nine = build_nine_stems(stem_dir)
 
-            # Stretch stems to target BPM
+            # Step 1: Stretch stems to target BPM (≤15% hard limit enforced inside)
             nine = time_stretch_stems(nine, detected_bpm, target_bpm)
+
+            # Step 2: Pitch-shift non-reference tracks to match the reference key.
+            # Only shifts if the track has key data AND is not the vocal/reference track.
+            semitones_applied = 0
+            if ref_key is not None and t.key is not None and t.key != ref_key:
+                dist = semitone_distance(t.key, ref_key)
+                nine = pitch_shift_stems(nine, dist)
+                semitones_applied = dist
+
+            track_analysis.append(
+                {
+                    "track_id": t.track_id,
+                    "detected_bpm": detected_bpm,
+                    "semitones_shifted": semitones_applied,
+                    "chords": chords,
+                    "midi_path": str(midi_path) if midi_path else None,
+                }
+            )
 
             vol = max(0.0, min(1.0, t.volume)) * master
             track_inputs.append(

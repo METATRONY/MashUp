@@ -3,7 +3,7 @@
  */
 
 import { parseYouTubeVideoId, thumbnailUrlForVideoId, fetchYouTubeTitle, enrichSong } from './youtube.js';
-import { suggestComponents, estimateFeaturesFromMeta, scoreComponents } from './compatibility.js';
+import { suggestComponents, estimateFeaturesFromMeta, scoreComponents, toCamelot } from './compatibility.js';
 
 const TOAST_EVENT = 'mashup-toast';
 
@@ -212,13 +212,18 @@ function buildSongCard(song, store) {
   // if null, BPM/key are estimated by librosa (mark with ~ prefix)
   const isEstimated = song.energy == null && (song.bpm != null || song.keyName != null);
   const estimatedTip = isEstimated ? ' title="Estimated via audio analysis — Spotify exact data unavailable"' : '';
+  const camelot = toCamelot(song.key, song.mode);
   const bpmDisplay = song.bpm ? `${isEstimated ? '~' : ''}${song.bpm} BPM` : '';
-  const keyDisplay = song.keyName ? `${isEstimated ? '~' : ''}${escapeHtml(song.keyName)}` : '';
+  // Show Camelot notation as the key badge (e.g. "4A"), full key name in tooltip
+  const keyDisplay = camelot
+    ? `${isEstimated ? '~' : ''}${camelot}`
+    : song.keyName ? `${isEstimated ? '~' : ''}${escapeHtml(song.keyName)}` : '';
+  const keyTip = song.keyName ? ` title="${escapeHtml(song.keyName)}${isEstimated ? ' (estimated)' : ''}"` : estimatedTip;
 
   const coverMetaHtml = (song.bpm || song.keyName)
     ? `<div class="song-card__cover-meta">
         ${song.bpm ? `<span class="song-card__cover-badge song-card__cover-badge--bpm${isEstimated ? ' song-card__cover-badge--est' : ''}"${estimatedTip}>${bpmDisplay}</span>` : ''}
-        ${song.keyName ? `<span class="song-card__cover-badge song-card__cover-badge--key${isEstimated ? ' song-card__cover-badge--est' : ''}"${estimatedTip}>${keyDisplay}</span>` : ''}
+        ${keyDisplay ? `<span class="song-card__cover-badge song-card__cover-badge--key${isEstimated ? ' song-card__cover-badge--est' : ''}"${keyTip}>${keyDisplay}</span>` : ''}
        </div>`
     : '';
 

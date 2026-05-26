@@ -24,7 +24,9 @@ function buildPayload(store) {
         video_id: song?.videoId || '',
         components: t.claimedComponents || [],
         volume: (t.volume ?? 80) / 100,
-        muted: !!t.muted
+        muted: !!t.muted,
+        key: song?.key ?? null,
+        mode: song?.mode ?? null
       };
     })
   };

@@ -83,12 +83,12 @@ function buildTrackRow(track, song, allTracks, targetBpm, suggested) {
     } title="${chipTitle}">${escapeHtml(chipLabel)}</button>`;
   }).join('');
 
-  // BPM stretch indicator
+  // BPM stretch indicator — hard limit is ±15% to avoid audible distortion
   const songBpm = song?.bpm;
   let bpmRowHtml = '';
   if (songBpm && targetBpm) {
     const pct = bpmStretchPct(songBpm, targetBpm);
-    const cls = pct > 30 ? 'bpm-stretch--bad' : pct > 15 ? 'bpm-stretch--warn' : 'bpm-stretch--good';
+    const cls = pct > 15 ? 'bpm-stretch--bad' : pct > 10 ? 'bpm-stretch--warn' : 'bpm-stretch--good';
     const stretchLabel = pct > 0 ? ` (${pct > 0 ? '+' : ''}${pct}%)` : ' (no stretch)';
     bpmRowHtml = `<div class="track-bpm-row">
       <span class="track-bpm-row__icon">♩</span>
@@ -155,9 +155,13 @@ function renderCompatibilityPanel(trackedSongs, targetBpm) {
   </span>`;
 
   const bpmWarnHtml =
-    worstPct > 30 && worstSong
+    worstPct > 15 && worstSong
       ? `<span class="bpm-warning">
-          ⚠ "${escapeHtml(worstSong.title || '')}" (${worstSong.bpm} BPM) needs ${worstPct}% stretch — consider adjusting target BPM
+          ⚠ "${escapeHtml(worstSong.title || '')}" (${worstSong.bpm} BPM) needs ${worstPct}% stretch — exceeds the 15% quality limit, consider adjusting target BPM
+        </span>`
+      : worstPct > 10 && worstSong
+      ? `<span class="bpm-warning bpm-warning--soft">
+          ⚠ "${escapeHtml(worstSong.title || '')}" (${worstSong.bpm} BPM) needs ${worstPct}% stretch — approaching quality limit
         </span>`
       : '';
 
