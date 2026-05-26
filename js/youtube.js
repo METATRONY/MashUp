@@ -62,3 +62,21 @@ export async function fetchYouTubeTitle(videoId) {
   }
   return `YouTube video`;
 }
+
+/**
+ * Enrich a video ID with song metadata via the backend /api/enrich endpoint.
+ * Returns the enrichment object or null on failure.
+ *
+ * @param {string} videoId
+ * @returns {Promise<object|null>}
+ */
+export async function enrichSong(videoId) {
+  const base = window.MASHUP_API_BASE || 'http://127.0.0.1:8000';
+  try {
+    const res = await fetch(`${base}/api/enrich?video_id=${encodeURIComponent(videoId)}`);
+    if (res.ok) return await res.json();
+  } catch {
+    /* network error — degrade gracefully */
+  }
+  return null;
+}

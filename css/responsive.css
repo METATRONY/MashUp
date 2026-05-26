@@ -1,4 +1,8 @@
 @media (max-width: 900px) {
+  .main-content {
+    grid-template-columns: 1fr;
+  }
+
   .site-nav {
     min-height: 56px;
   }

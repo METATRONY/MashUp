@@ -3,9 +3,10 @@
  */
 
 import { createStore } from './state.js';
-import { setupSongInput, renderSongs, setupToastListener } from './ui.js';
+import { setupSongInput, renderSongs, initSongSearch, setupToastListener } from './ui.js';
 import { initMixer, renderTracks, renderTransport, renderGenerationUI, setupKeyboardShortcuts } from './mixer.js';
 import { initAudio } from './audio.js';
+import { initCatalog } from './catalog.js';
 
 // Create the global store
 const store = createStore();
@@ -13,17 +14,21 @@ const store = createStore();
 // Setup toast listener (for events from components/mixer modules)
 setupToastListener();
 
-// Setup song input form
+// Setup song input form and library search
 setupSongInput(store);
+initSongSearch();
 
 // Initialize mixer (transport wiring)
 initMixer(store);
 
-// YouTube IFrame API + playback sync (loads script; play still requires user gesture)
+// Wire result audio element and waveform animation
 initAudio(store);
 
 // Setup keyboard shortcuts (Space = play/pause)
 setupKeyboardShortcuts();
+
+// Search re-renders the song list without touching store state
+document.addEventListener('mashup:search', () => renderSongs(store.getState().songs, store));
 
 // Subscribe to state changes
 store.subscribe((state) => {
@@ -40,6 +45,22 @@ store.subscribe((state) => {
   renderTransport(state.mashup);
   renderGenerationUI(state.mashup, store);
 })();
+
+// Tab switcher for Library / Catalog
+let _catalogInited = false;
+document.querySelectorAll('.library-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.library-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    document.getElementById('library-panel').hidden = tab !== 'library';
+    document.getElementById('catalog-panel').hidden = tab !== 'catalog';
+    if (tab === 'catalog' && !_catalogInited) {
+      _catalogInited = true;
+      initCatalog(store);
+    }
+  });
+});
 
 // Handle URL hash navigation
 function handleHash() {

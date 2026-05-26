@@ -364,6 +364,92 @@
   color: var(--text-muted);
 }
 
+/* Compatibility panel (key badge + BPM warning) */
+.mixer-compat-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-muted);
+  font-size: 0.8125rem;
+}
+
+.mashup-key-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-weight: 600;
+  font-size: 0.75rem;
+  border: 1px solid transparent;
+}
+
+.compat--good {
+  background: var(--accent-green-dim);
+  color: #065f46;
+  border-color: rgba(5, 150, 105, 0.25);
+}
+
+.compat--warn {
+  background: rgba(251, 191, 36, 0.12);
+  color: #92400e;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.compat--bad {
+  background: rgba(220, 38, 38, 0.08);
+  color: #991b1b;
+  border-color: rgba(220, 38, 38, 0.25);
+}
+
+.compat--neutral {
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+.bpm-warning {
+  color: #92400e;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* Per-track BPM stretch row */
+.track-bpm-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  margin-bottom: 2px;
+}
+
+.track-bpm-row__icon {
+  color: var(--text-muted);
+}
+
+.track-bpm-row__value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.bpm-stretch--good { color: #065f46; }
+.bpm-stretch--warn { color: #92400e; }
+.bpm-stretch--bad  { color: #991b1b; }
+
+/* Suggested component chip */
+.component-chip--suggested {
+  background: rgba(217, 119, 6, 0.08);
+  border-color: rgba(217, 119, 6, 0.35);
+  color: #92400e;
+}
+
+.component-chip--suggested:hover {
+  background: rgba(217, 119, 6, 0.15);
+}
+
 /* Master waveform */
 .master-waveform {
   display: block;

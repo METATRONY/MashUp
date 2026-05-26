@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
+
+# Use the yt-dlp from the same venv as the running Python, falling back to PATH.
+_YTDLP = str(Path(sys.executable).parent / "yt-dlp")
+if not Path(_YTDLP).exists():
+    _YTDLP = "yt-dlp"
 
 
 PROXY_KEYS = (
@@ -41,7 +47,7 @@ def download_youtube_audio(video_id: str, dest_dir: Path) -> Path:
 
     # Base invocation shared by all network strategies.
     base_cmd = [
-        "yt-dlp",
+        _YTDLP,
         "-f",
         "bestaudio/best",
         "--no-playlist",

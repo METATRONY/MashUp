@@ -4,7 +4,7 @@ FastAPI service that downloads YouTube audio, separates stems with **Demucs** (`
 
 ## Requirements
 
-- **Python** 3.10+
+- **Python** 3.10-3.12 recommended (3.14 currently breaks some Demucs/torchaudio paths)
 - **ffmpeg** on your `PATH` (for yt-dlp post-process and MP3 encode)
 - **yt-dlp** is installed via pip (`requirements.txt`)
 

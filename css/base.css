@@ -183,6 +183,10 @@ input {
 
 .main-content {
   padding-bottom: var(--space-3xl);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-xl);
+  align-items: start;
 }
 
 .section {

@@ -6,6 +6,10 @@ Requires: ffmpeg and yt-dlp on PATH; Python deps from requirements.txt.
 
 from __future__ import annotations
 
+from dotenv import load_dotenv
+from pathlib import Path as _Path
+load_dotenv(_Path(__file__).resolve().parent / ".env")
+
 import json
 import shutil
 import tempfile
@@ -13,13 +17,16 @@ import uuid
 from pathlib import Path
 from threading import Lock
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .constants import VALID_COMPONENTS
 from .download import download_youtube_audio
+from .enrich import enrich_video
+from .chord_analysis import extract_chords
+from .midi_analysis import audio_to_midi
 from .essence_schema import (
     AnalyzeRequest,
     AnalyzeResponse,
@@ -29,9 +36,11 @@ from .essence_schema import (
     RenderResponse,
 )
 from .essence_stub import analyze_stub, compose_stub
+from .catalog import load_catalog, search_yt_video_id
 from .mapping import build_nine_stems
 from .mix_audio import assemble_mix, wav_to_mp3, write_wav
 from .separate import run_demucs
+from .tempo_match import detect_bpm, time_stretch_stems
 
 OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
 OUTPUT_DIR.mkdir(exist_ok=True)
@@ -122,13 +131,37 @@ def run_pipeline(job_id: str, payload: dict) -> None:
     try:
         track_inputs: list[dict] = []
         master = max(0.0, min(1.0, req.master_volume))
+        track_analysis: list[dict] = []
+
+        target_bpm = max(30.0, min(300.0, float(req.bpm)))
 
         for t in req.tracks:
             tdir = work / "dl" / t.track_id
             wav = download_youtube_audio(t.video_id.strip(), tdir)
+
+            # Detect actual BPM from the downloaded audio
+            detected_bpm = detect_bpm(wav)
+
+            # Chord + MIDI analysis on the raw download (non-fatal)
+            chords = extract_chords(wav)
+            midi_out_dir = OUTPUT_DIR / job_id / t.track_id
+            midi_path = audio_to_midi(wav, midi_out_dir)
+            track_analysis.append(
+                {
+                    "track_id": t.track_id,
+                    "detected_bpm": detected_bpm,
+                    "chords": chords,
+                    "midi_path": str(midi_path) if midi_path else None,
+                }
+            )
+
             sep_root = work / "sep" / t.track_id
             stem_dir = run_demucs(wav, sep_root)
             nine = build_nine_stems(stem_dir)
+
+            # Stretch stems to target BPM
+            nine = time_stretch_stems(nine, detected_bpm, target_bpm)
+
             vol = max(0.0, min(1.0, t.volume)) * master
             track_inputs.append(
                 {
@@ -149,6 +182,7 @@ def run_pipeline(job_id: str, payload: dict) -> None:
             {
                 "status": "done",
                 "download_url": f"/outputs/{job_id}.mp3",
+                "track_analysis": track_analysis,
                 "error": None,
             },
         )
@@ -165,9 +199,39 @@ def run_pipeline(job_id: str, payload: dict) -> None:
         shutil.rmtree(work, ignore_errors=True)
 
 
+@app.get("/api/catalog")
+def get_catalog():
+    """Return the full curated song catalog."""
+    return load_catalog()
+
+
+@app.get("/api/search-yt")
+def search_yt(artist: str = Query(default=""), title: str = Query(default="", min_length=1)):
+    """Find a YouTube video ID for a given artist + title via yt-dlp search."""
+    vid = search_yt_video_id(artist.strip(), title.strip())
+    if not vid:
+        raise HTTPException(status_code=404, detail="No video found on YouTube")
+    return {"video_id": vid}
+
+
 @app.get("/api/health")
 def health():
     return {"ok": True}
+
+
+@app.get("/api/enrich")
+def enrich_song(video_id: str = Query(..., min_length=6, max_length=20)):
+    """
+    Enrich a YouTube video ID with song metadata.
+
+    Resolves artist/title from oEmbed, fetches Spotify audio features
+    (BPM, key, mode, energy, valence, danceability, album art), and retrieves
+    lyrics from Genius or lrclib.net. All external calls are non-fatal;
+    unresolvable fields are returned as null.
+    """
+    if not video_id.strip():
+        raise HTTPException(status_code=400, detail="video_id is required")
+    return enrich_video(video_id.strip())
 
 
 @app.post("/api/analyze", response_model=AnalyzeResponse)
@@ -245,4 +309,5 @@ def mashup_job_status(job_id: str):
         "status": j["status"],
         "error": j.get("error"),
         "download_url": j.get("download_url"),
+        "track_analysis": j.get("track_analysis"),
     }

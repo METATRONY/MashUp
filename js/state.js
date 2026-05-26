@@ -1,8 +1,31 @@
 /**
  * Simple pub-sub store for application state.
+ *
+ * Song shape:
+ *   { id, url, videoId, title, thumbnail,
+ *     artist, bpm, key, keyName, mode, energy, valence, danceability,
+ *     lyricsSnippet, lyricsFull, albumArt, spotifyId,
+ *     enriching, enriched }
  */
 
 import { isValidComponentId, validateExclusiveClaims } from './constants/components.js';
+
+const SONGS_STORAGE_KEY = 'mashup_songs_v1';
+
+function persistSongs(songs) {
+  try {
+    localStorage.setItem(SONGS_STORAGE_KEY, JSON.stringify(
+      songs.filter((s) => !s.enriching) // don't persist mid-enrichment
+    ));
+  } catch (_) {}
+}
+
+function loadPersistedSongs() {
+  try {
+    const raw = localStorage.getItem(SONGS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (_) { return []; }
+}
 
 function normalizeComponents(arr) {
   if (!Array.isArray(arr)) return [];
@@ -11,7 +34,7 @@ function normalizeComponents(arr) {
 
 export function createStore() {
   let state = {
-    songs: [],
+    songs: loadPersistedSongs(),
     mashup: {
       tracks: [],
       bpm: 120,
@@ -40,6 +63,7 @@ export function createStore() {
 
     setState(partial) {
       state = { ...state, ...partial };
+      if (partial.songs) persistSongs(state.songs);
       notify();
     },
 
@@ -48,6 +72,7 @@ export function createStore() {
         ...state,
         songs: state.songs.map((song) => (song.id === id ? { ...song, ...updates } : song))
       };
+      persistSongs(state.songs);
       notify();
     },
 
@@ -60,6 +85,7 @@ export function createStore() {
           tracks: state.mashup.tracks.filter((t) => t.songId !== id)
         }
       };
+      persistSongs(state.songs);
       notify();
     },
 
