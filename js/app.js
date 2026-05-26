@@ -3,10 +3,11 @@
  */
 
 import { createStore } from './state.js';
-import { setupSongInput, renderSongs, initSongSearch, setupToastListener } from './ui.js';
+import { setupSongInput, renderSongs, initSongSearch, setupToastListener, setMatchFilter, clearMatchFilter } from './ui.js';
 import { initMixer, renderTracks, renderTransport, renderGenerationUI, setupKeyboardShortcuts } from './mixer.js';
 import { initAudio } from './audio.js';
 import { initCatalog } from './catalog.js';
+import { camelotDistance, bpmStretchPct } from './compatibility.js';
 
 // Create the global store
 const store = createStore();
@@ -27,8 +28,85 @@ initAudio(store);
 // Setup keyboard shortcuts (Space = play/pause)
 setupKeyboardShortcuts();
 
-// Search re-renders the song list without touching store state
+// Search / match-filter re-renders the song list without touching store state
 document.addEventListener('mashup:search', () => renderSongs(store.getState().songs, store));
+
+// "Find a Good Match" button
+(function initFindMatch() {
+  const btn = document.getElementById('find-match-btn');
+  if (!btn) return;
+
+  let active = false;
+
+  btn.addEventListener('click', () => {
+    if (active) {
+      active = false;
+      clearMatchFilter();
+      return;
+    }
+
+    const state = store.getState();
+    const mixerSongIds = new Set(state.mashup.tracks.map((t) => t.songId));
+    const mixerSongs = state.mashup.tracks
+      .map((t) => state.songs.find((s) => s.id === t.songId))
+      .filter(Boolean);
+
+    if (mixerSongs.length === 0) return;
+
+    const targetBpm = state.mashup.bpm ?? 120;
+
+    const matchIds = new Set();
+    let goodCount = 0;
+    let okCount = 0;
+
+    for (const candidate of state.songs) {
+      if (mixerSongIds.has(candidate.id)) continue; // already in mixer
+
+      // BPM check — skip if hard limit exceeded for ALL mixer songs
+      const bpmOk = mixerSongs.every((ms) => {
+        if (!ms.bpm || !candidate.bpm) return true; // unknown = not disqualified
+        return bpmStretchPct(candidate.bpm, targetBpm) <= 15;
+      });
+      if (!bpmOk) continue;
+
+      // Key check — must be Camelot-compatible (distance ≤ 2) with ALL mixer songs
+      const keyOk = mixerSongs.every((ms) => {
+        if (ms.key == null || candidate.key == null) return true; // unknown = not disqualified
+        return camelotDistance(ms.key, ms.mode, candidate.key, candidate.mode) <= 2;
+      });
+      if (!keyOk) continue;
+
+      matchIds.add(candidate.id);
+
+      // Count "great" matches separately for the label
+      const isGreat = mixerSongs.every((ms) => {
+        const keyGood = ms.key == null || candidate.key == null ||
+          camelotDistance(ms.key, ms.mode, candidate.key, candidate.mode) <= 1;
+        const bpmGood = !ms.bpm || !candidate.bpm ||
+          bpmStretchPct(candidate.bpm, targetBpm) <= 10;
+        return keyGood && bpmGood;
+      });
+      if (isGreat) goodCount++; else okCount++;
+    }
+
+    active = true;
+    const total = goodCount + okCount;
+    const label = total === 0
+      ? 'No compatible songs found in library'
+      : `${total} compatible song${total !== 1 ? 's' : ''} (${goodCount} great, ${okCount} good)`;
+    setMatchFilter(matchIds, label);
+  });
+
+  // Keep button enabled/disabled in sync with mixer state
+  store.subscribe((state) => {
+    const hasTracks = state.mashup.tracks.length > 0;
+    btn.disabled = !hasTracks;
+    if (!hasTracks && active) {
+      active = false;
+      clearMatchFilter();
+    }
+  });
+})();
 
 // Subscribe to state changes
 store.subscribe((state) => {

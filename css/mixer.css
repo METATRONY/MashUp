@@ -1,3 +1,83 @@
+.mixer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.mixer-header .section-title {
+  margin-bottom: 0;
+}
+
+.find-match-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  border: 1.5px solid var(--border-strong);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+}
+
+.find-match-btn:hover:not(:disabled) {
+  border-color: var(--accent-violet);
+  color: var(--accent-violet);
+  background: color-mix(in srgb, var(--accent-violet) 8%, var(--bg-card));
+}
+
+.find-match-btn--active {
+  border-color: var(--accent-violet) !important;
+  background: color-mix(in srgb, var(--accent-violet) 12%, var(--bg-card)) !important;
+  color: var(--accent-violet) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-violet) 18%, transparent);
+}
+
+.find-match-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.match-filter-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-bottom: var(--space-sm);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent-violet) 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--accent-violet) 30%, transparent);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--accent-violet);
+}
+
+.match-filter-banner[hidden] { display: none; }
+
+.match-filter-banner svg { flex-shrink: 0; opacity: 0.8; }
+
+#match-filter-label { flex: 1; }
+
+.match-filter-clear {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--accent-violet);
+  opacity: 0.7;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.match-filter-clear:hover { opacity: 1; }
+
 .mixer-section .mixer-panel {
   margin-top: 0;
 }

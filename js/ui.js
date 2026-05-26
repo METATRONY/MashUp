@@ -297,15 +297,37 @@ function buildSongCard(song, store) {
 }
 
 let _songSearchQuery = '';
+let _matchFilterIds = null; // Set<string> | null — null means no filter active
+
+export function setMatchFilter(ids, label = 'Showing compatible songs') {
+  _matchFilterIds = ids instanceof Set ? ids : new Set(ids);
+  const banner = document.getElementById('match-filter-banner');
+  const labelEl = document.getElementById('match-filter-label');
+  if (banner) banner.hidden = false;
+  if (labelEl) labelEl.textContent = label;
+  const btn = document.getElementById('find-match-btn');
+  if (btn) btn.classList.add('find-match-btn--active');
+  document.dispatchEvent(new CustomEvent('mashup:search', { bubbles: true }));
+}
+
+export function clearMatchFilter() {
+  _matchFilterIds = null;
+  const banner = document.getElementById('match-filter-banner');
+  if (banner) banner.hidden = true;
+  const btn = document.getElementById('find-match-btn');
+  if (btn) btn.classList.remove('find-match-btn--active');
+  document.dispatchEvent(new CustomEvent('mashup:search', { bubbles: true }));
+}
 
 export function initSongSearch() {
   const input = document.getElementById('song-search');
   if (!input) return;
   input.addEventListener('input', () => {
     _songSearchQuery = input.value.trim().toLowerCase();
-    // Re-render is triggered by state subscriber, so just force a re-render
     input.dispatchEvent(new CustomEvent('mashup:search', { bubbles: true }));
   });
+
+  document.getElementById('match-filter-clear')?.addEventListener('click', clearMatchFilter);
 }
 
 export function renderSongs(songs, store) {
@@ -314,13 +336,18 @@ export function renderSongs(songs, store) {
   if (!container) return;
 
   const sorted = sortedSongs(songs);
-  const filtered = _songSearchQuery
-    ? sorted.filter((s) =>
-        (s.title || '').toLowerCase().includes(_songSearchQuery) ||
-        (s.artist || '').toLowerCase().includes(_songSearchQuery) ||
-        (s.keyName || '').toLowerCase().includes(_songSearchQuery)
-      )
-    : sorted;
+
+  let filtered = sorted;
+  if (_matchFilterIds !== null) {
+    filtered = filtered.filter((s) => _matchFilterIds.has(s.id));
+  }
+  if (_songSearchQuery) {
+    filtered = filtered.filter((s) =>
+      (s.title || '').toLowerCase().includes(_songSearchQuery) ||
+      (s.artist || '').toLowerCase().includes(_songSearchQuery) ||
+      (s.keyName || '').toLowerCase().includes(_songSearchQuery)
+    );
+  }
 
   if (countEl) countEl.textContent = songs.length > 0 ? `${filtered.length} / ${songs.length}` : '';
 
