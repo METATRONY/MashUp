@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 
-def run_demucs(wav_path: Path, out_root: Path) -> Path:
+def run_demucs(wav_path: Path, out_root: Path, model: str = "htdemucs") -> Path:
     out_root.mkdir(parents=True, exist_ok=True)
     result = subprocess.run(
         [
@@ -15,7 +15,7 @@ def run_demucs(wav_path: Path, out_root: Path) -> Path:
             "-m",
             "demucs",
             "-n",
-            "htdemucs",
+            model,
             "-o",
             str(out_root),
             str(wav_path),
@@ -37,7 +37,7 @@ def run_demucs(wav_path: Path, out_root: Path) -> Path:
             f"Demucs failed with exit code {result.returncode}.\n{tail}"
         )
 
-    htd = out_root / "htdemucs"
+    htd = out_root / model
     if not htd.is_dir():
         raise FileNotFoundError(f"Demucs output missing: {htd}")
     stem_name = wav_path.stem

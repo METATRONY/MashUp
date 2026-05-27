@@ -154,27 +154,29 @@ def run_pipeline(job_id: str, payload: dict) -> None:
             if first_keyed:
                 ref_key = first_keyed.key
 
-        # Sample mode: download only first 60 s so Demucs has far less to process
-        dl_max_dur = 60 if req.sample else None
+        # Sample mode: download only first 30 s — Demucs only needs 30 s to produce a 30 s output
+        dl_max_dur = 30 if req.sample else None
 
         for t in req.tracks:
             tdir = work / "dl" / t.track_id
             wav = download_youtube_audio(t.video_id.strip(), tdir, max_duration=dl_max_dur)
 
-            # Hard-trim via ffmpeg when sample mode — guarantees Demucs never
-            # sees more than 60 s regardless of what yt-dlp actually delivered.
+            # Detect actual BPM before trimming — more audio = more accurate reading
+            detected_bpm = detect_bpm(wav)
+
+            # Hard-trim to 30 s before Demucs — this is the key speedup.
+            # Demucs processing time scales with audio length; 30 s is all it
+            # needs to produce a 30 s output. yt-dlp may return slightly more
+            # than requested so ffmpeg enforces the hard limit.
             if req.sample:
                 trimmed = tdir / f"{t.track_id}_trim.wav"
                 subprocess.run(
-                    ["ffmpeg", "-y", "-i", str(wav), "-t", "60",
+                    ["ffmpeg", "-y", "-i", str(wav), "-t", "30",
                      "-ac", "2", "-ar", "44100", str(trimmed)],
                     check=True, timeout=120,
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 )
                 wav = trimmed
-
-            # Detect actual BPM from the downloaded audio
-            detected_bpm = detect_bpm(wav)
 
             # Chord + MIDI analysis on the raw download (non-fatal)
             chords = extract_chords(wav)
@@ -182,7 +184,9 @@ def run_pipeline(job_id: str, payload: dict) -> None:
             midi_path = audio_to_midi(wav, midi_out_dir)
 
             sep_root = work / "sep" / t.track_id
-            stem_dir = run_demucs(wav, sep_root)
+            # mdx_extra is 2-3× faster than htdemucs on CPU — acceptable for a preview
+            demucs_model = "mdx_extra" if req.sample else "htdemucs"
+            stem_dir = run_demucs(wav, sep_root, model=demucs_model)
             nine = build_nine_stems(stem_dir)
 
             # Step 1: Stretch stems to target BPM (≤15% hard limit enforced inside)
