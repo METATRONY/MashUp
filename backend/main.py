@@ -103,6 +103,7 @@ class TrackIn(BaseModel):
 class MashupRequest(BaseModel):
     bpm: float = 120.0
     master_volume: float = 0.8
+    sample: bool = False   # True → truncate output to 30 seconds
     tracks: list[TrackIn]
 
 
@@ -200,6 +201,10 @@ def run_pipeline(job_id: str, payload: dict) -> None:
             )
 
         mix, sr = assemble_mix(track_inputs)
+
+        if req.sample:
+            mix = mix[:sr * 30]  # trim to 30 seconds
+
         wav_path = work / "mix.wav"
         write_wav(wav_path, mix, sr)
         mp3_path = OUTPUT_DIR / f"{job_id}.mp3"

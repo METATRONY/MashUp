@@ -11,12 +11,13 @@ function apiBase() {
 }
 
 
-function buildPayload(store) {
+function buildPayload(store, { sample = false } = {}) {
   const state = store.getState();
   const tracks = [...state.mashup.tracks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   return {
     bpm: state.mashup.bpm ?? 120,
     master_volume: (state.mashup.masterVolume ?? 80) / 100,
+    sample,
     tracks: tracks.map((t) => {
       const song = state.songs.find((s) => s.id === t.songId);
       return {
@@ -71,7 +72,7 @@ async function pollJob(jobId, store) {
   throw new Error('Timed out waiting for mashup job.');
 }
 
-export async function startMashupGeneration(store) {
+export async function startMashupGeneration(store, { sample = false } = {}) {
   const tracks = store.getState().mashup.tracks;
   if (!canGenerateMashup(tracks)) {
     showToast('Add two or more tracks and assign exclusive components.', 'info');
@@ -86,7 +87,7 @@ export async function startMashupGeneration(store) {
     const res = await fetch(`${base}/api/mashup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildPayload(store))
+      body: JSON.stringify(buildPayload(store, { sample }))
     });
 
     if (!res.ok) {

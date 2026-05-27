@@ -267,6 +267,11 @@ export function renderGenerationUI(mashup, store) {
   const busy = gen.status === 'queued' || gen.status === 'running';
   btn.disabled = busy || !canGenerateMashup(tracks);
   btn.textContent = busy ? 'Working…' : 'Generate mashup';
+  const sampleBtnEl = document.getElementById('sample-mashup-btn');
+  if (sampleBtnEl) {
+    sampleBtnEl.disabled = busy || !canGenerateMashup(tracks);
+    sampleBtnEl.textContent = busy ? 'Working…' : 'Sample';
+  }
 
   if (gen.status === 'idle') status.textContent = '';
   else if (gen.status === 'queued') status.textContent = 'Queued…';
@@ -305,6 +310,7 @@ export function initMixer(store) {
   const masterLabel = document.getElementById('master-volume-label');
   const mixerTracks = document.getElementById('mixer-tracks');
   const genBtn = document.getElementById('generate-mashup-btn');
+  const sampleBtn = document.getElementById('sample-mashup-btn');
   const dlBtn = document.getElementById('download-mashup-btn');
 
   playBtn?.addEventListener('click', () => playPause());
@@ -362,6 +368,10 @@ export function initMixer(store) {
 
   genBtn?.addEventListener('click', () => {
     startMashupGeneration(store);
+  });
+
+  sampleBtn?.addEventListener('click', () => {
+    startMashupGeneration(store, { sample: true });
   });
 
   mixerTracks?.addEventListener('click', async (e) => {
