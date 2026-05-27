@@ -73,21 +73,27 @@ async function pollJob(jobId, store) {
 }
 
 export async function startMashupGeneration(store, { sample = false } = {}) {
-  const tracks = store.getState().mashup.tracks;
-  if (!canGenerateMashup(tracks)) {
+  const state = store.getState();
+
+  // Guard: prevent double-firing if a job is already in progress
+  const { status } = state.mashup.generation;
+  if (status === 'queued' || status === 'running') return;
+
+  if (!canGenerateMashup(state.mashup.tracks)) {
     showToast('Add two or more tracks and assign exclusive components.', 'info');
     return;
   }
 
-  store.setGeneration({ status: 'queued', jobId: null, resultUrl: null, error: null });
+  store.setGeneration({ status: 'queued', jobId: null, resultUrl: null, error: null, isSample: sample });
   setMashupResultUrl(null);
 
   try {
     const base = apiBase();
+    const payload = buildPayload(store, { sample });
     const res = await fetch(`${base}/api/mashup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildPayload(store, { sample }))
+      body: JSON.stringify(payload)
     });
 
     if (!res.ok) {

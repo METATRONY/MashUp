@@ -265,12 +265,17 @@ export function renderGenerationUI(mashup, store) {
   }
 
   const busy = gen.status === 'queued' || gen.status === 'running';
-  btn.disabled = busy || !canGenerateMashup(tracks);
-  btn.textContent = busy ? 'Working…' : 'Generate mashup';
+  const canGen = canGenerateMashup(tracks);
+  const isSample = !!gen.isSample;
+
+  // Only the button that triggered the job shows "Working…"; the other is just disabled
+  btn.disabled = busy || !canGen;
+  btn.textContent = (busy && !isSample) ? 'Working…' : 'Generate mashup';
+
   const sampleBtnEl = document.getElementById('sample-mashup-btn');
   if (sampleBtnEl) {
-    sampleBtnEl.disabled = busy || !canGenerateMashup(tracks);
-    sampleBtnEl.textContent = busy ? 'Working…' : 'Sample';
+    sampleBtnEl.disabled = busy || !canGen;
+    sampleBtnEl.textContent = (busy && isSample) ? 'Working…' : 'Sample';
   }
 
   if (gen.status === 'idle') status.textContent = '';

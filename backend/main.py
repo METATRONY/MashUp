@@ -130,6 +130,8 @@ def validate_request(req: MashupRequest) -> None:
 
 def run_pipeline(job_id: str, payload: dict) -> None:
     req = MashupRequest.model_validate(payload)
+    mode = "SAMPLE" if req.sample else "FULL"
+    print(f"[{job_id}] Pipeline mode={mode} bpm={req.bpm} tracks={len(req.tracks)}", flush=True)
     set_job(job_id, {"status": "running"})
     work = Path(tempfile.mkdtemp(prefix=f"mashup_{job_id}_"))
     try:

@@ -45,7 +45,8 @@ export function createStore() {
         status: 'idle',
         jobId: null,
         resultUrl: null,
-        error: null
+        error: null,
+        isSample: false
       }
     }
   };
