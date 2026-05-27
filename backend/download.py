@@ -40,7 +40,14 @@ def _run(cmd: list[str], timeout: int, env: dict[str, str] | None = None) -> str
     raise RuntimeError(f"Command failed ({result.returncode}): {' '.join(cmd)}\n{output}")
 
 
-def download_youtube_audio(video_id: str, dest_dir: Path) -> Path:
+def download_youtube_audio(video_id: str, dest_dir: Path, max_duration: int | None = None) -> Path:
+    """
+    Download best audio for video_id into dest_dir as a WAV file.
+
+    If max_duration is set (seconds), only the first max_duration seconds are
+    downloaded using yt-dlp --download-sections, dramatically reducing download
+    size and Demucs processing time for sample/preview generation.
+    """
     dest_dir.mkdir(parents=True, exist_ok=True)
     url = f"https://www.youtube.com/watch?v={video_id}"
     pattern = str(dest_dir / f"{video_id}.%(ext)s")
@@ -60,6 +67,9 @@ def download_youtube_audio(video_id: str, dest_dir: Path) -> Path:
         pattern,
         url,
     ]
+
+    if max_duration:
+        base_cmd = base_cmd + ["--download-sections", f"*0-{max_duration}"]
 
     # Strategy A: use environment as-is (works in networks that require proxy).
     # Strategy B: force direct connection with proxies disabled (works when proxy blocks YouTube).

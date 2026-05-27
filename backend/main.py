@@ -12,6 +12,7 @@ load_dotenv(_Path(__file__).resolve().parent / ".env")
 
 import json
 import shutil
+import subprocess
 import tempfile
 import uuid
 from pathlib import Path
@@ -153,9 +154,24 @@ def run_pipeline(job_id: str, payload: dict) -> None:
             if first_keyed:
                 ref_key = first_keyed.key
 
+        # Sample mode: download only first 60 s so Demucs has far less to process
+        dl_max_dur = 60 if req.sample else None
+
         for t in req.tracks:
             tdir = work / "dl" / t.track_id
-            wav = download_youtube_audio(t.video_id.strip(), tdir)
+            wav = download_youtube_audio(t.video_id.strip(), tdir, max_duration=dl_max_dur)
+
+            # Hard-trim via ffmpeg when sample mode — guarantees Demucs never
+            # sees more than 60 s regardless of what yt-dlp actually delivered.
+            if req.sample:
+                trimmed = tdir / f"{t.track_id}_trim.wav"
+                subprocess.run(
+                    ["ffmpeg", "-y", "-i", str(wav), "-t", "60",
+                     "-ac", "2", "-ar", "44100", str(trimmed)],
+                    check=True, timeout=120,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                wav = trimmed
 
             # Detect actual BPM from the downloaded audio
             detected_bpm = detect_bpm(wav)
