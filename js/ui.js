@@ -167,10 +167,9 @@ const COMP_LABEL = { drums: 'Drums', bass: 'Bass', vocals: 'Vocals', melody: 'Me
 
 function sortedSongs(songs) {
   return [...songs].sort((a, b) => {
-    const ka = a.keyName || 'zzz';
-    const kb = b.keyName || 'zzz';
-    if (ka !== kb) return ka.localeCompare(kb);
-    return (a.bpm || 0) - (b.bpm || 0);
+    const bpmDiff = (a.bpm || 0) - (b.bpm || 0);
+    if (bpmDiff !== 0) return bpmDiff;
+    return (a.keyName || 'zzz').localeCompare(b.keyName || 'zzz');
   });
 }
 
@@ -228,40 +227,44 @@ function buildSongCard(song, store) {
     : '';
 
   card.innerHTML = `
-    <div class="song-card__cover">
-      <img class="song-card__thumb" src="${art}" alt="" loading="lazy">
-      ${song.enriching ? '<div class="song-card__spinner"></div>' : ''}
-      ${coverMetaHtml}
-      <div class="song-card__cover-actions">
-        <button type="button" class="btn btn-sm song-card__add-btn add-to-mixer-btn" data-song-id="${song.id}">
-          <svg width="13" height="13"><use href="#icon-waveform"/></svg> Add to Mixer
-        </button>
+    <div class="song-card__row">
+      <div class="song-card__row-text">
+        ${song.artist ? `<p class="song-card__artist-sm" title="${escapeHtml(song.artist)}">${escapeHtml(song.artist)}</p>` : ''}
+        <p class="song-card__title-sm" title="${escapeHtml(song.title)}">${escapeHtml(song.title)}</p>
       </div>
-    </div>
-    <div class="song-card__foot">
-      <div class="song-card__foot-main">
-        <p class="song-card__title-sm">${escapeHtml(song.title)}</p>
+      <div class="song-card__row-meta">
+        ${bpmDisplay ? `<span class="song-card__cover-badge song-card__cover-badge--bpm${isEstimated ? ' song-card__cover-badge--est' : ''}"${estimatedTip}>${bpmDisplay}</span>` : ''}
+        ${keyDisplay ? `<span class="song-card__cover-badge song-card__cover-badge--key${isEstimated ? ' song-card__cover-badge--est' : ''}"${keyTip}>${keyDisplay}</span>` : ''}
       </div>
+      <button type="button" class="btn btn-icon btn-ghost add-to-mixer-btn song-card__row-add" data-song-id="${song.id}" title="Add to mixer">
+        <svg width="14" height="14"><use href="#icon-waveform"/></svg>
+      </button>
       <button type="button" class="song-card__open-btn" title="Show details" aria-expanded="false">
         <svg width="16" height="16"><use href="#icon-chevron"/></svg>
       </button>
     </div>
     <div class="song-card__details" hidden>
-      ${song.artist ? `<p class="song-card__artist">${escapeHtml(song.artist)}</p>` : ''}
-      ${song.videoId ? `<a class="song-card__yt-link" href="https://www.youtube.com/watch?v=${encodeURIComponent(song.videoId)}" target="_blank" rel="noopener noreferrer">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1C24 15.9 24 12 24 12s0-3.9-.5-5.8zM9.8 15.5V8.5l6.3 3.5-6.3 3.5z"/></svg>
-        Listen on YouTube
-      </a>` : ''}
-      <div class="song-card__badges">
-        ${song.bpm ? `<span class="song-card__badge song-card__badge--bpm"${estimatedTip}>${bpmDisplay}</span>` : ''}
-        ${song.keyName ? `<span class="song-card__badge song-card__badge--key"${estimatedTip}>${keyDisplay}</span>` : ''}
-        ${isEstimated ? `<span class="song-card__badge song-card__badge--est"${estimatedTip}>est.</span>` : ''}
+      ${art ? `<div class="song-card__cover">
+        <img class="song-card__thumb" src="${art}" alt="" loading="lazy">
+        ${song.enriching ? '<div class="song-card__spinner"></div>' : ''}
+      </div>` : ''}
+      <div class="song-card__detail-body">
+        ${song.artist ? `<p class="song-card__artist">${escapeHtml(song.artist)}</p>` : ''}
+        ${song.videoId ? `<a class="song-card__yt-link" href="https://www.youtube.com/watch?v=${encodeURIComponent(song.videoId)}" target="_blank" rel="noopener noreferrer">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1C24 15.9 24 12 24 12s0-3.9-.5-5.8zM9.8 15.5V8.5l6.3 3.5-6.3 3.5z"/></svg>
+          Listen on YouTube
+        </a>` : ''}
+        <div class="song-card__badges">
+          ${bpmDisplay ? `<span class="song-card__badge song-card__badge--bpm"${estimatedTip}>${bpmDisplay}</span>` : ''}
+          ${keyDisplay ? `<span class="song-card__badge song-card__badge--key"${estimatedTip}>${keyDisplay}</span>` : ''}
+          ${isEstimated ? `<span class="song-card__badge song-card__badge--est"${estimatedTip}>est.</span>` : ''}
+        </div>
+        ${suggestHtml}
+        ${lyricsHtml}
+        <button type="button" class="btn btn-icon btn-ghost remove-song-btn" data-song-id="${song.id}" title="Remove from library" style="align-self:flex-start;margin-top:4px">
+          <svg width="16" height="16"><use href="#icon-trash"/></svg>
+        </button>
       </div>
-      ${suggestHtml}
-      ${lyricsHtml}
-      <button type="button" class="btn btn-icon btn-ghost remove-song-btn" data-song-id="${song.id}" title="Remove from library" style="align-self:flex-start;margin-top:4px">
-        <svg width="16" height="16"><use href="#icon-trash"/></svg>
-      </button>
     </div>
   `;
 

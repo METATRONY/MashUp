@@ -87,7 +87,7 @@
         <span class="site-nav__name">Mash<span class="site-nav__accent">Up</span></span>
       </a>
       <div class="site-nav__actions">
-        <a class="site-nav__link" href="#song-input-section">Library</a>
+        <button type="button" class="site-nav__link" id="library-toggle-btn">Library</button>
         <a class="site-nav__link" href="#mixer-section">Mixer</a>
       </div>
     </nav>
@@ -106,8 +106,9 @@
 
   <!-- Main Content -->
   <main class="container main-content" id="main-content">
-    <!-- Song Input Panel -->
+    <!-- Song Input Panel (floating drawer) -->
     <section class="section section-panel song-input-section" id="song-input-section">
+      <button type="button" class="library-close-btn" id="library-close-btn" aria-label="Close library">&times;</button>
       <div class="library-tab-bar">
         <button class="library-tab active" data-tab="library">
           <svg width="16" height="16"><use href="#icon-waveform"/></svg> My Library
@@ -177,6 +178,9 @@
           <svg width="14" height="14"><use href="#icon-search"/></svg>
           Find a Good Match
         </button>
+        <button type="button" class="btn btn-sm dj-mode-btn" id="dj-mode-btn" disabled title="DJ mode: play tracks sequentially with crossfades instead of mixing them in parallel">
+          DJ Mode
+        </button>
       </div>
       <div class="mixer-panel" id="mixer-panel">
         <div class="mixer-tracks" id="mixer-tracks">
@@ -207,6 +211,10 @@
             <input type="range" id="master-volume" class="range-slider" min="0" max="100" value="80">
             <span class="volume-label" id="master-volume-label">80%</span>
           </div>
+          <div class="seek-row" id="seek-row" hidden>
+            <input type="range" id="seek-slider" class="seek-slider range-slider" min="0" max="100" value="0" step="0.1" disabled aria-label="Seek position">
+            <span class="seek-duration" id="seek-duration">0:00</span>
+          </div>
         </div>
       </div>
       <div class="mixer-generate-bar" id="mixer-generate-bar">
@@ -217,6 +225,9 @@
           </button>
           <button type="button" class="btn btn-secondary" id="sample-mashup-btn" disabled title="Generate a 30-second preview">
             Sample
+          </button>
+          <button type="button" class="btn btn-secondary" id="prompt-mashup-btn" disabled title="Generate an AI music prompt for Lyria 3, Suno, Udio, etc.">
+            Prompt
           </button>
           <span class="generation-status" id="generation-status" aria-live="polite"></span>
           <a class="btn btn-secondary" id="download-mashup-btn" href="#" download style="display: none">Download MP3</a>
@@ -237,6 +248,12 @@
     </div>
   </footer>
 
+  <!-- Library drawer hover trigger (invisible left-edge strip) -->
+  <div id="library-edge-trigger"></div>
+
+  <!-- Library backdrop -->
+  <div class="library-backdrop" id="library-backdrop"></div>
+
   <!-- Toast container -->
   <div class="toast-container" id="toast-container"></div>
 
@@ -251,6 +268,25 @@
     </div>
   </div>
 
-  <script type="module" src="js/app.js?v=15"></script>
+  <!-- Prompt Modal -->
+  <div class="prompt-overlay" id="prompt-overlay" hidden>
+    <div class="prompt-dialog" role="dialog" aria-modal="true" aria-labelledby="prompt-dialog-title">
+      <div class="prompt-dialog__header">
+        <div class="prompt-dialog__title-row">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          <h3 class="prompt-dialog__title" id="prompt-dialog-title">AI Music Prompt</h3>
+        </div>
+        <button type="button" class="prompt-dialog__close" id="prompt-dialog-close" aria-label="Close">&times;</button>
+      </div>
+      <p class="prompt-dialog__hint">Ready to use with Lyria 3, Suno, Udio, or any AI music generator. Paste it directly into the prompt field.</p>
+      <textarea class="prompt-dialog__text" id="prompt-dialog-text" readonly spellcheck="false"></textarea>
+      <div class="prompt-dialog__actions">
+        <button type="button" class="btn btn-primary" id="prompt-dialog-copy">Copy Prompt</button>
+        <button type="button" class="btn btn-secondary" id="prompt-dialog-close-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js?v=42"></script>
 </body>
 </html>

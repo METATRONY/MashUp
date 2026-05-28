@@ -109,8 +109,37 @@ export function keyCompatibility(songs) {
 
   if (maxDist === 0) return { label: 'Perfect match', colorClass: 'compat--good', detail };
   if (maxDist === 1) return { label: 'Compatible', colorClass: 'compat--good', detail };
-  if (maxDist === 2) return { label: 'At pitch limit (±2 semitones)', colorClass: 'compat--warn', detail };
-  return { label: 'Clashing — pitch shift would distort', colorClass: 'compat--bad', detail };
+  if (maxDist === 2) return { label: 'Needs pitch shift', colorClass: 'compat--warn', detail };
+  return { label: 'Clashing — outside shift range', colorClass: 'compat--bad', detail };
+}
+
+/**
+ * Vibe compatibility — energy + valence delta across all mixer songs.
+ * Returns null when fewer than 2 songs have Spotify audio features.
+ *
+ * @param {Array<{energy: number|null, valence: number|null, danceability: number|null}>} songs
+ * @returns {{ label: string, colorClass: string, detail: string } | null}
+ */
+export function vibeCompatibility(songs) {
+  const featured = songs.filter((s) => s.energy != null && s.valence != null);
+  if (featured.length < 2) return null;
+
+  let maxEnergyDiff = 0;
+  let maxValenceDiff = 0;
+  for (let i = 0; i < featured.length; i++) {
+    for (let j = i + 1; j < featured.length; j++) {
+      maxEnergyDiff = Math.max(maxEnergyDiff, Math.abs(featured[i].energy - featured[j].energy));
+      maxValenceDiff = Math.max(maxValenceDiff, Math.abs(featured[i].valence - featured[j].valence));
+    }
+  }
+
+  const score = (maxEnergyDiff + maxValenceDiff) / 2;
+  const detail = `energy Δ${Math.round(maxEnergyDiff * 100)}% · mood Δ${Math.round(maxValenceDiff * 100)}%`;
+
+  if (score <= 0.15) return { label: 'Matching vibe', colorClass: 'compat--good', detail };
+  if (score <= 0.35) return { label: 'Similar vibe', colorClass: 'compat--good', detail };
+  if (score <= 0.55) return { label: 'Mixed vibe', colorClass: 'compat--warn', detail };
+  return { label: 'Contrasting vibe', colorClass: 'compat--bad', detail };
 }
 
 /**

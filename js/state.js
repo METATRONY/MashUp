@@ -11,13 +11,62 @@
 import { isValidComponentId, validateExclusiveClaims } from './constants/components.js';
 
 const SONGS_STORAGE_KEY = 'mashup_songs_v1';
+const MIXER_STORAGE_KEY = 'mashup_mixer_v1';
+const _apiBase = () => window.MASHUP_API_BASE || 'http://127.0.0.1:8000';
+let _apiSaveTimer = null;
+let _mixerSaveTimer = null;
+
+function persistMixer(mashup) {
+  clearTimeout(_mixerSaveTimer);
+  _mixerSaveTimer = setTimeout(() => {
+    try {
+      const gen = mashup.generation;
+      localStorage.setItem(MIXER_STORAGE_KEY, JSON.stringify({
+        tracks: mashup.tracks,
+        bpm: mashup.bpm,
+        masterVolume: mashup.masterVolume,
+        djMode: mashup.djMode,
+        djSegmentDuration: mashup.djSegmentDuration,
+        djCrossfadeDuration: mashup.djCrossfadeDuration,
+        djAutoTiming: mashup.djAutoTiming,
+        djNSwaps: mashup.djNSwaps,
+        generation: gen.status === 'done' ? {
+          jobId: gen.jobId,
+          resultUrl: gen.resultUrl,
+          stemFiles: gen.stemFiles,
+          stemEdits: gen.stemEdits,
+          trackAnalysis: gen.trackAnalysis,
+          isSample: gen.isSample,
+        } : null,
+      }));
+    } catch (_) {}
+  }, 400);
+}
+
+function loadPersistedMixer() {
+  try {
+    const raw = localStorage.getItem(MIXER_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) { return null; }
+}
+
+function saveToApi(songs) {
+  clearTimeout(_apiSaveTimer);
+  _apiSaveTimer = setTimeout(() => {
+    fetch(`${_apiBase()}/api/library`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(songs)
+    }).catch(() => {});
+  }, 600);
+}
 
 function persistSongs(songs) {
+  const toSave = songs.filter((s) => !s.enriching);
   try {
-    localStorage.setItem(SONGS_STORAGE_KEY, JSON.stringify(
-      songs.filter((s) => !s.enriching) // don't persist mid-enrichment
-    ));
+    localStorage.setItem(SONGS_STORAGE_KEY, JSON.stringify(toSave));
   } catch (_) {}
+  saveToApi(toSave);
 }
 
 function loadPersistedSongs() {
@@ -33,20 +82,35 @@ function normalizeComponents(arr) {
 }
 
 export function createStore() {
+  const saved = loadPersistedMixer();
+  const savedGen = saved?.generation;
+
   let state = {
     songs: loadPersistedSongs(),
     mashup: {
-      tracks: [],
-      bpm: 120,
+      tracks:              saved?.tracks              ?? [],
+      bpm:                 saved?.bpm                 ?? 120,
+      masterVolume:        saved?.masterVolume        ?? 80,
+      djMode:              saved?.djMode              ?? false,
+      djSegmentDuration:   saved?.djSegmentDuration   ?? 30,
+      djCrossfadeDuration: saved?.djCrossfadeDuration ?? 4,
+      djAutoTiming:        saved?.djAutoTiming        ?? false,
+      djNSwaps:            saved?.djNSwaps            ?? 4,
       playing: false,
       currentTime: 0,
-      masterVolume: 80,
-      generation: {
+      generation: savedGen ? {
+        status: 'done',
+        jobId:         savedGen.jobId         ?? null,
+        resultUrl:     savedGen.resultUrl     ?? null,
+        error:         null,
+        isSample:      savedGen.isSample      ?? false,
+        trackAnalysis: savedGen.trackAnalysis ?? [],
+        stemFiles:     savedGen.stemFiles     ?? {},
+        stemEdits:     savedGen.stemEdits     ?? {},
+      } : {
         status: 'idle',
-        jobId: null,
-        resultUrl: null,
-        error: null,
-        isSample: false
+        jobId: null, resultUrl: null, error: null,
+        isSample: false, trackAnalysis: [], stemFiles: {}, stemEdits: {}
       }
     }
   };
@@ -54,6 +118,7 @@ export function createStore() {
   const listeners = new Set();
 
   function notify() {
+    persistMixer(state.mashup);
     listeners.forEach((fn) => fn(state));
   }
 

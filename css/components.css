@@ -165,11 +165,11 @@
   white-space: nowrap;
 }
 
-/* Song grid */
+/* Song list — compact rows, single column */
 .songs-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 /* Compact song card */
@@ -194,10 +194,52 @@
   outline: 2px dashed var(--accent-teal);
 }
 
-/* Cover image area */
+/* ── Compact row (always visible) ───────────────────────────────────────────── */
+.song-card__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 6px 8px;
+}
+
+.song-card__row-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.song-card__artist-sm {
+  margin: 0;
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.song-card__row-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.song-card__row-add {
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: opacity var(--transition-fast);
+}
+
+.song-card:hover .song-card__row-add,
+.song-card__row-add:focus {
+  opacity: 1;
+}
+
+/* ── Cover image (inside details, shown on expand) ──────────────────────────── */
 .song-card__cover {
   position: relative;
-  aspect-ratio: 1 / 1;
+  width: 100%;
+  max-height: 200px;
   overflow: hidden;
   background: var(--bg-muted);
 }
@@ -207,6 +249,7 @@
   height: 100%;
   object-fit: cover;
   display: block;
+  max-height: 200px;
 }
 
 .song-card__spinner {
@@ -236,17 +279,7 @@
   opacity: 0.8;
 }
 
-/* BPM + key badges pinned to top-left of cover */
-.song-card__cover-meta {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  pointer-events: none;
-}
-
+/* BPM + key badges — used in compact row (no backdrop blur needed outside cover) */
 .song-card__cover-badge {
   display: inline-block;
   padding: 2px 7px;
@@ -254,19 +287,19 @@
   font-weight: 700;
   letter-spacing: 0.03em;
   border-radius: var(--radius-full);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
   white-space: nowrap;
 }
 
 .song-card__cover-badge--bpm {
-  background: rgba(13, 148, 136, 0.82);
-  color: #fff;
+  background: rgba(13, 148, 136, 0.18);
+  color: var(--accent-teal);
+  border: 1px solid rgba(13, 148, 136, 0.35);
 }
 
 .song-card__cover-badge--key {
-  background: rgba(109, 40, 217, 0.82);
-  color: #fff;
+  background: rgba(109, 40, 217, 0.14);
+  color: #a78bfa;
+  border: 1px solid rgba(109, 40, 217, 0.3);
 }
 
 .song-card__cover-badge--est {
@@ -274,48 +307,15 @@
   font-style: italic;
 }
 
-/* Actions overlay on hover */
-.song-card__cover-actions {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: var(--space-xs);
-  background: linear-gradient(transparent, rgba(0,0,0,0.72));
+/* Detail body padding */
+.song-card__detail-body {
   display: flex;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity var(--transition-fast);
-}
-
-.song-card:hover .song-card__cover-actions {
-  opacity: 1;
-}
-
-.song-card__add-btn {
-  background: rgba(255,255,255,0.92) !important;
-  color: #18181b !important;
-  border: none !important;
-  font-size: 0.7rem !important;
-  padding: 0.3rem 0.65rem !important;
-  border-radius: var(--radius-full) !important;
-  font-weight: 700 !important;
-  white-space: nowrap;
-}
-
-.song-card__add-btn:hover {
-  background: #fff !important;
-}
-
-/* Footer strip */
-.song-card__foot {
-  display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: var(--space-xs);
-  padding: 6px 8px 4px;
-  border-top: 1px solid var(--border);
+  padding: var(--space-sm);
 }
 
+/* Legacy compat — foot-main kept for min-width on title */
 .song-card__foot-main {
   flex: 1;
   min-width: 0;

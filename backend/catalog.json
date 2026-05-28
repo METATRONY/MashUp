@@ -8208,5 +8208,23 @@
     "year": 2025,
     "artist": "Benson Boone",
     "title": "The Runner"
+  },
+  {
+    "video_id": "LlZydtG3xqI",
+    "artist": "TLC",
+    "title": "Creep",
+    "bpm": 93.0,
+    "key_name": "C minor",
+    "album_art": "https://i.scdn.co/image/ab67616d0000b2733ae63e3e2d9da8366e33fdab",
+    "spotify_id": "1aWV3uY3SIEZVbmv45oFWS"
+  },
+  {
+    "video_id": "XFkzRNyygfk",
+    "artist": "Radiohead",
+    "title": "Creep",
+    "bpm": 92.3,
+    "key_name": "G major",
+    "album_art": "https://i.scdn.co/image/ab67616d0000b273ec548c00d3ac2f10be73366d",
+    "spotify_id": "70LcF31zb1H0PyJoS1Sx1r"
   }
 ]

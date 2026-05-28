@@ -27,6 +27,10 @@ export function setMashupResultUrl(url) {
     a.pause();
     a.removeAttribute('src');
     a.load();
+    const slider = document.getElementById('seek-slider');
+    const row = document.getElementById('seek-row');
+    if (slider) { slider.value = '0'; slider.disabled = true; }
+    if (row) row.setAttribute('hidden', '');
   }
 }
 
@@ -43,6 +47,33 @@ export function initAudio(store) {
     storeRef.updateMashup({ playing: false });
     stopClock();
   });
+
+  ra?.addEventListener('loadedmetadata', () => {
+    const slider = document.getElementById('seek-slider');
+    const durEl = document.getElementById('seek-duration');
+    const row = document.getElementById('seek-row');
+    const dur = ra.duration;
+    if (slider) {
+      slider.max = String(isFinite(dur) ? dur : 100);
+      slider.value = '0';
+      slider.disabled = false;
+    }
+    if (durEl) durEl.textContent = isFinite(dur) ? formatTime(dur) : '';
+    if (row) row.removeAttribute('hidden');
+  });
+
+  ra?.addEventListener('timeupdate', () => {
+    const slider = document.getElementById('seek-slider');
+    if (slider && document.activeElement !== slider) {
+      slider.value = String(ra.currentTime);
+    }
+  });
+
+  document.getElementById('seek-slider')?.addEventListener('input', (e) => {
+    const audio = getResultAudio();
+    if (audio) audio.currentTime = Number(e.target.value);
+  });
+
   tickWaveform();
 }
 
@@ -84,6 +115,8 @@ export function stop() {
   stopClock();
   const el = document.getElementById('time-display');
   if (el) el.textContent = formatTime(0);
+  const seekSlider = document.getElementById('seek-slider');
+  if (seekSlider) seekSlider.value = '0';
 }
 
 function pickTimeSource() {

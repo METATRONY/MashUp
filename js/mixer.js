@@ -1,5 +1,5 @@
 /**
- * Mixer UI: tracks, drag-drop, component chips, transport, generate.
+ * Mixer UI: column-per-track grid, drag-drop, transport, generate.
  */
 
 import { playPause, stop } from './audio.js';
@@ -7,19 +7,22 @@ import { showToast, addSongToMixer } from './ui.js';
 import {
   COMPONENTS,
   canGenerateMashup,
-  componentsClaimedByOthers
 } from './constants/components.js';
 import { startMashupGeneration } from './api.js';
+import { initStemEditor } from './stem_editor.js';
+import { generateMusicPrompt } from './prompt.js';
 import {
   computeRelativeSuggestions,
   bpmStretchPct,
   keyCompatibility,
+  vibeCompatibility,
   worstBpmStretch,
-  smartDefaultBpm
+  smartDefaultBpm,
+  toCamelot,
 } from './compatibility.js';
 
 let trackStructureSig = '';
-let userSetBpm = false; // true once the user manually edits the BPM input
+let userSetBpm = false;
 
 function escapeHtml(s) {
   const d = document.createElement('div');
@@ -38,14 +41,10 @@ function reorderTracks(store, fromId, toId) {
   const fromIdx = sorted.findIndex((t) => t.id === fromId);
   const toIdx = sorted.findIndex((t) => t.id === toId);
   if (fromIdx < 0 || toIdx < 0) return;
-
   const next = [...sorted];
   const [moved] = next.splice(fromIdx, 1);
   next.splice(toIdx, 0, moved);
-
-  store.updateMashup({
-    tracks: next.map((t, i) => ({ ...t, order: i }))
-  });
+  store.updateMashup({ tracks: next.map((t, i) => ({ ...t, order: i })) });
 }
 
 function trackStructureKey(track) {
@@ -53,83 +52,179 @@ function trackStructureKey(track) {
   return `${track.id}@${track.order}@${cc}`;
 }
 
-function buildTrackRow(track, song, allTracks, targetBpm, suggested) {
-  const row = document.createElement('div');
-  row.className = 'mixer-track';
-  row.draggable = true;
-  row.dataset.trackId = track.id;
+// Sequence number badges ①②③…
+const SEQ_BADGES = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'];
 
-  const title = song?.title || 'Unknown';
-  const vid = song?.videoId || '';
-  const claimed = new Set(track.claimedComponents || []);
-  const takenElsewhere = componentsClaimedByOthers(allTracks, track.id);
+// ── Grid builder ──────────────────────────────────────────────────────────────
 
-  const chipsHtml = COMPONENTS.map(({ id, label }) => {
-    const isMine = claimed.has(id);
-    const disabled = !isMine && takenElsewhere.has(id);
-    const isSuggested = !isMine && !disabled && suggested.has(id);
-    const cls = ['component-chip', 'btn', 'btn-sm'];
-    if (isMine) cls.push('component-chip--active');
-    if (disabled) cls.push('component-chip--disabled');
-    if (isSuggested) cls.push('component-chip--suggested');
-    const chipLabel = isSuggested ? `★ ${label}` : label;
-    const chipTitle = disabled
-      ? 'Taken by another track'
-      : isSuggested
-      ? `Suggested for this song's energy and feel`
-      : label;
-    return `<button type="button" class="${cls.join(' ')}" data-component-id="${id}" ${
-      disabled ? 'disabled' : ''
-    } title="${chipTitle}">${escapeHtml(chipLabel)}</button>`;
-  }).join('');
+// Matches track info cell in either layout (transposed or DJ)
+const TRACK_CELL_SEL = '.mixer-grid__track-info, .mixer-grid__col-header';
 
-  // BPM stretch indicator — hard limit is ±15% to avoid audible distortion
-  const songBpm = song?.bpm;
-  let bpmRowHtml = '';
-  if (songBpm && targetBpm) {
-    const pct = bpmStretchPct(songBpm, targetBpm);
-    const cls = pct > 15 ? 'bpm-stretch--bad' : pct > 10 ? 'bpm-stretch--warn' : 'bpm-stretch--good';
-    const stretchLabel = pct > 0 ? ` (${pct > 0 ? '+' : ''}${pct}%)` : ' (no stretch)';
-    bpmRowHtml = `<div class="track-bpm-row">
-      <span class="track-bpm-row__icon">♩</span>
-      <span class="track-bpm-row__value ${cls}">${songBpm} BPM → ${targetBpm} BPM${stretchLabel}</span>
-    </div>`;
+function buildMixerGrid(sorted, songs, targetBpm, relativeSuggestions, djMode = false, djSettings = {}) {
+  const grid = document.createElement('div');
+  grid.className = 'mixer-grid';
+
+  if (djMode) {
+    // ── DJ Mode: original column-per-track layout ──────────────────────
+    const headerRow = document.createElement('div');
+    headerRow.className = 'mixer-grid__row mixer-grid__header-row';
+
+    const corner = document.createElement('div');
+    corner.className = 'mixer-grid__label mixer-grid__corner';
+    headerRow.appendChild(corner);
+
+    sorted.forEach((track, idx) => {
+      const song = songs.find((s) => s.id === track.songId);
+      const art = song?.albumArt || song?.thumbnail || '';
+      const bpmPct = song?.bpm && targetBpm ? bpmStretchPct(song.bpm, targetBpm) : 0;
+      const bpmCls = bpmPct > 15 ? 'bpm-stretch--bad' : bpmPct > 10 ? 'bpm-stretch--warn' : 'bpm-stretch--good';
+      const camelot = toCamelot(song?.key ?? null, song?.mode ?? null);
+      const keyBadge = camelot ? `<span class="mgcol__key">${escapeHtml(camelot)}</span>` : '';
+      const bpmBadge = song?.bpm && targetBpm
+        ? `<span class="mgcol__bpm ${bpmCls}">${song.bpm}→${targetBpm}${bpmPct > 0 ? ` (+${bpmPct}%)` : ''}</span>`
+        : '';
+
+      const col = document.createElement('div');
+      col.className = 'mixer-grid__col-header';
+      col.dataset.trackId = track.id;
+      col.draggable = true;
+      col.innerHTML = `
+        <span class="mixer-grid__seq-badge">${SEQ_BADGES[idx] ?? idx + 1}</span>
+        <div class="mgcol__thumb-wrap">
+          ${art ? `<img class="mgcol__thumb" src="${escapeHtml(art)}" alt="" loading="lazy">` : `<div class="mgcol__thumb mgcol__thumb--empty"></div>`}
+        </div>
+        <div class="mgcol__info">
+          <span class="mgcol__title" title="${escapeHtml(song?.title || '')}">${escapeHtml(song?.title || 'Unknown')}</span>
+          ${song?.artist ? `<span class="mgcol__artist">${escapeHtml(song.artist)}</span>` : ''}
+          <div class="mgcol__meta">${keyBadge}${bpmBadge}</div>
+        </div>
+        <div class="mgcol__controls">
+          <input type="range" class="range-slider track-volume" min="0" max="100" value="${track.volume}" aria-label="Track volume">
+          <div class="mgcol__btns">
+            <button type="button" class="btn btn-icon track-mute ${track.muted ? 'is-active' : ''}" data-action="mute" title="Mute"><svg width="14" height="14"><use href="#icon-mute"/></svg></button>
+            <button type="button" class="btn btn-icon track-solo ${track.solo ? 'is-active' : ''}" data-action="solo" title="Solo"><svg width="14" height="14"><use href="#icon-solo"/></svg></button>
+            <button type="button" class="btn btn-icon track-remove" data-action="remove" title="Remove"><svg width="14" height="14"><use href="#icon-trash"/></svg></button>
+          </div>
+        </div>`;
+      headerRow.appendChild(col);
+    });
+
+    grid.appendChild(headerRow);
+
+    const { segmentDuration = 30, crossfadeDuration = 4, autoTiming = false, nSwaps = 4 } = djSettings;
+    const settingsRow = document.createElement('div');
+    settingsRow.className = 'mixer-grid__row mixer-grid__dj-settings';
+    settingsRow.innerHTML = `
+      <div class="mixer-grid__label mixer-grid__corner dj-settings__corner">
+        <span class="dj-settings__label">DJ Settings</span>
+      </div>
+      <div class="dj-settings__body">
+        <label class="dj-settings__field dj-settings__auto">
+          <input type="checkbox" id="dj-auto-input" ${autoTiming ? 'checked' : ''}><span>Auto timing</span>
+        </label>
+        <label class="dj-settings__field ${autoTiming ? 'dj-settings__field--hidden' : ''}">
+          <span>Segment</span>
+          <input type="number" class="dj-input" id="dj-segment-input" min="5" max="300" step="5" value="${segmentDuration}">
+          <span>sec</span>
+        </label>
+        <label class="dj-settings__field ${!autoTiming ? 'dj-settings__field--hidden' : ''}">
+          <span>Swaps</span>
+          <input type="number" class="dj-input" id="dj-swaps-input" min="2" max="20" step="1" value="${nSwaps}">
+        </label>
+        <label class="dj-settings__field">
+          <span>Crossfade</span>
+          <input type="number" class="dj-input" id="dj-crossfade-input" min="1" max="30" step="1" value="${crossfadeDuration}">
+          <span>sec</span>
+        </label>
+      </div>`;
+    grid.appendChild(settingsRow);
+
+  } else {
+    // ── Mashup Mode: transposed grid — tracks as rows, components as columns ──
+    grid.classList.add('mixer-grid--transposed');
+    grid.style.gridTemplateColumns = `240px repeat(${COMPONENTS.length}, minmax(52px, 1fr))`;
+
+    // Header: corner + one label per component
+    const corner = document.createElement('div');
+    corner.className = 'mixer-grid__corner';
+    grid.appendChild(corner);
+
+    COMPONENTS.forEach(({ id: compId, label }) => {
+      const hdr = document.createElement('div');
+      hdr.className = 'mixer-grid__comp-header';
+      hdr.dataset.componentId = compId;
+      hdr.innerHTML = `<span>${escapeHtml(label)}</span>`;
+      grid.appendChild(hdr);
+    });
+
+    // One row per track: track-info cell + component cells
+    sorted.forEach((track, idx) => {
+      const song = songs.find((s) => s.id === track.songId);
+      const art = song?.albumArt || song?.thumbnail || '';
+      const bpmPct = song?.bpm && targetBpm ? bpmStretchPct(song.bpm, targetBpm) : 0;
+      const bpmCls = bpmPct > 15 ? 'bpm-stretch--bad' : bpmPct > 10 ? 'bpm-stretch--warn' : 'bpm-stretch--good';
+      const camelot = toCamelot(song?.key ?? null, song?.mode ?? null);
+      const keyBadge = camelot ? `<span class="mgcol__key">${escapeHtml(camelot)}</span>` : '';
+      const bpmBadge = song?.bpm && targetBpm
+        ? `<span class="mgcol__bpm ${bpmCls}">${song.bpm}→${targetBpm}${bpmPct > 0 ? ` (+${bpmPct}%)` : ''}</span>`
+        : '';
+
+      const infoCell = document.createElement('div');
+      infoCell.className = 'mixer-grid__track-info';
+      infoCell.dataset.trackId = track.id;
+      infoCell.draggable = true;
+      infoCell.innerHTML = `
+        <div class="mgrow__thumb-wrap">
+          ${art ? `<img class="mgrow__thumb" src="${escapeHtml(art)}" alt="" loading="lazy">` : `<div class="mgrow__thumb mgrow__thumb--empty"></div>`}
+        </div>
+        <div class="mgrow__body">
+          <div class="mgrow__info">
+            <span class="mgrow__title" title="${escapeHtml(song?.title || '')}">${escapeHtml(song?.title || 'Unknown')}</span>
+            ${song?.artist ? `<span class="mgrow__artist">${escapeHtml(song.artist)}</span>` : ''}
+            <div class="mgrow__meta">${keyBadge}${bpmBadge}</div>
+          </div>
+          <div class="mgrow__controls">
+            <input type="range" class="range-slider track-volume" min="0" max="100" value="${track.volume}" aria-label="Track volume">
+            <div class="mgrow__btns">
+              <button type="button" class="btn btn-icon track-mute ${track.muted ? 'is-active' : ''}" data-action="mute" title="Mute"><svg width="14" height="14"><use href="#icon-mute"/></svg></button>
+              <button type="button" class="btn btn-icon track-solo ${track.solo ? 'is-active' : ''}" data-action="solo" title="Solo"><svg width="14" height="14"><use href="#icon-solo"/></svg></button>
+              <button type="button" class="btn btn-icon track-remove" data-action="remove" title="Remove"><svg width="14" height="14"><use href="#icon-trash"/></svg></button>
+            </div>
+          </div>
+        </div>`;
+      grid.appendChild(infoCell);
+
+      COMPONENTS.forEach(({ id: compId, label: compLabel }) => {
+        const claimed = (track.claimedComponents || []).includes(compId);
+        const takenElsewhere = !claimed && sorted.some(
+          (t) => t.id !== track.id && (t.claimedComponents || []).includes(compId)
+        );
+        const suggested = !claimed && !takenElsewhere &&
+          (relativeSuggestions.get(track.id)?.has(compId) ?? false);
+
+        const cell = document.createElement('button');
+        cell.type = 'button';
+        cell.className = [
+          'mixer-grid__cell',
+          claimed && 'mixer-grid__cell--on',
+          takenElsewhere && 'mixer-grid__cell--taken',
+          suggested && 'mixer-grid__cell--suggested',
+        ].filter(Boolean).join(' ');
+        cell.dataset.trackId = track.id;
+        cell.dataset.componentId = compId;
+        if (takenElsewhere) cell.disabled = true;
+        cell.title = takenElsewhere ? 'Taken by another track'
+          : suggested ? "Suggested for this song's energy and feel" : compLabel;
+        cell.innerHTML = `<span class="mixer-grid__dot"></span>${suggested ? '<span class="mixer-grid__star">★</span>' : ''}`;
+        grid.appendChild(cell);
+      });
+    });
   }
 
-  row.innerHTML = `
-    <button type="button" class="mixer-track__handle" title="Drag to reorder" aria-label="Reorder track">
-      <svg width="18" height="18"><use href="#icon-drag"/></svg>
-    </button>
-    <div class="mixer-track__body">
-      <div class="mixer-track__main">
-        <span class="mixer-track__title">${escapeHtml(title)}</span>
-        <span class="mixer-track__id">${escapeHtml(vid)}</span>
-      </div>
-      ${bpmRowHtml}
-      <div class="mixer-track__components" role="group" aria-label="Components from this track">
-        <span class="mixer-track__components-label">Take</span>
-        <div class="component-chip-row">${chipsHtml}</div>
-      </div>
-      <div class="mixer-track__controls">
-        <div class="mixer-track__vol">
-          <svg width="14" height="14" class="mixer-track__vol-icon"><use href="#icon-volume"/></svg>
-          <input type="range" class="range-slider track-volume" min="0" max="100" value="${track.volume}" aria-label="Track volume">
-        </div>
-        <button type="button" class="btn btn-icon track-mute ${track.muted ? 'is-active' : ''}" data-action="mute" title="Mute">
-          <svg width="18" height="18"><use href="#icon-mute"/></svg>
-        </button>
-        <button type="button" class="btn btn-icon track-solo ${track.solo ? 'is-active' : ''}" data-action="solo" title="Solo">
-          <svg width="18" height="18"><use href="#icon-solo"/></svg>
-        </button>
-        <button type="button" class="btn btn-icon track-remove" data-action="remove" title="Remove from mixer">
-          <svg width="18" height="18"><use href="#icon-trash"/></svg>
-        </button>
-      </div>
-    </div>
-  `;
-
-  return row;
+  return grid;
 }
+
+// ── Compatibility panel (above grid) ─────────────────────────────────────────
 
 function renderCompatibilityPanel(trackedSongs, targetBpm) {
   let panel = document.getElementById('mixer-compat-panel');
@@ -141,32 +236,39 @@ function renderCompatibilityPanel(trackedSongs, targetBpm) {
     tracksEl?.parentNode?.insertBefore(panel, tracksEl);
   }
 
-  if (trackedSongs.length < 2) {
-    panel.hidden = true;
-    return;
-  }
+  if (trackedSongs.length < 2) { panel.hidden = true; return; }
   panel.hidden = false;
 
   const keyInfo = keyCompatibility(trackedSongs);
   const { pct: worstPct, worstSong } = worstBpmStretch(trackedSongs, targetBpm);
+  const vibeInfo = vibeCompatibility(trackedSongs);
 
   const keyHtml = `<span class="mashup-key-badge ${keyInfo.colorClass}" title="${keyInfo.detail}">
     Key: ${keyInfo.detail || '—'} — ${keyInfo.label}
   </span>`;
 
-  const bpmWarnHtml =
-    worstPct > 15 && worstSong
-      ? `<span class="bpm-warning">
-          ⚠ "${escapeHtml(worstSong.title || '')}" (${worstSong.bpm} BPM) needs ${worstPct}% stretch — exceeds the 15% quality limit, consider adjusting target BPM
-        </span>`
-      : worstPct > 10 && worstSong
-      ? `<span class="bpm-warning bpm-warning--soft">
-          ⚠ "${escapeHtml(worstSong.title || '')}" (${worstSong.bpm} BPM) needs ${worstPct}% stretch — approaching quality limit
-        </span>`
-      : '';
+  const hasBpmData = trackedSongs.some((s) => s.bpm);
+  const bpmCls = worstPct > 15 ? 'compat--bad' : worstPct > 10 ? 'compat--warn' : 'compat--good';
+  const bpmTitle = worstSong ? `${worstSong.title || ''} (${worstSong.bpm} BPM)` : '';
+  const bpmLabel = worstPct > 15
+    ? `BPM: ${worstPct}% stretch — exceeds quality limit`
+    : worstPct > 10
+    ? `BPM: ${worstPct}% stretch — borderline`
+    : worstPct > 0
+    ? `BPM: ${worstPct}% stretch`
+    : 'BPM: perfect match';
+  const bpmHtml = hasBpmData
+    ? `<span class="mashup-key-badge ${bpmCls}" title="${escapeHtml(bpmTitle)}">${bpmLabel}</span>`
+    : '';
 
-  panel.innerHTML = keyHtml + bpmWarnHtml;
+  const vibeHtml = vibeInfo
+    ? `<span class="mashup-key-badge ${vibeInfo.colorClass}" title="${vibeInfo.detail}">Vibe: ${vibeInfo.label}</span>`
+    : '';
+
+  panel.innerHTML = keyHtml + bpmHtml + vibeHtml;
 }
+
+// ── renderTracks ──────────────────────────────────────────────────────────────
 
 export function renderTracks(tracks, songs, store) {
   const container = document.getElementById('mixer-tracks');
@@ -180,18 +282,20 @@ export function renderTracks(tracks, songs, store) {
     .map((t) => songs.find((s) => s.id === t.songId))
     .filter(Boolean);
 
-  // Always update the compatibility panel (cheap)
   renderCompatibilityPanel(trackedSongs, targetBpm);
 
-  // Relative suggestions: ★ goes to whichever track scores BEST for each component
-  const trackSongPairs = sorted.map((t) => ({ id: t.id, song: songs.find((s) => s.id === t.songId) || null }));
+  const trackSongPairs = sorted.map((t) => ({
+    id: t.id,
+    song: songs.find((s) => s.id === t.songId) || null,
+  }));
   const relativeSuggestions = computeRelativeSuggestions(trackSongPairs);
-
-  const structureSig = sorted.map(trackStructureKey).join('|') + `@bpm${targetBpm}`;
+  const djMode = !!state.mashup.djMode;
+  const djAutoTiming = !!state.mashup.djAutoTiming;
+  const structureSig = sorted.map(trackStructureKey).join('|') + `@bpm${targetBpm}@dj${djMode ? 1 : 0}@auto${djAutoTiming ? 1 : 0}`;
 
   if (sorted.length === 0) {
     trackStructureSig = '';
-    container.querySelectorAll('.mixer-track').forEach((el) => el.remove());
+    container.querySelector('.mixer-grid')?.remove();
     empty?.removeAttribute('hidden');
     return;
   }
@@ -200,40 +304,40 @@ export function renderTracks(tracks, songs, store) {
 
   if (structureSig !== trackStructureSig) {
     trackStructureSig = structureSig;
-    container.querySelectorAll('.mixer-track').forEach((el) => el.remove());
-    sorted.forEach((track) => {
-      const song = songs.find((s) => s.id === track.songId);
-      const suggested = relativeSuggestions.get(track.id) || new Set();
-      container.appendChild(buildTrackRow(track, song, sorted, targetBpm, suggested));
-    });
+    container.querySelector('.mixer-grid')?.remove();
+    const djSettings = {
+      segmentDuration: state.mashup.djSegmentDuration ?? 30,
+      crossfadeDuration: state.mashup.djCrossfadeDuration ?? 4,
+      autoTiming: djAutoTiming,
+      nSwaps: state.mashup.djNSwaps ?? 4,
+    };
+    container.appendChild(buildMixerGrid(sorted, songs, targetBpm, relativeSuggestions, djMode, djSettings));
     return;
   }
 
+  // In-place updates: volume, mute, solo (avoid full rebuild for slider drags)
   sorted.forEach((track) => {
-    const row = container.querySelector(`[data-track-id="${track.id}"]`);
-    if (!row) return;
-    const vol = row.querySelector('.track-volume');
+    const col = container.querySelector(`[data-track-id="${track.id}"]`);
+    if (!col) return;
+    const vol = col.querySelector('.track-volume');
     if (vol && document.activeElement !== vol) vol.value = String(track.volume);
-    row.querySelector('.track-mute')?.classList.toggle('is-active', track.muted);
-    row.querySelector('.track-solo')?.classList.toggle('is-active', track.solo);
+    col.querySelector('.track-mute')?.classList.toggle('is-active', track.muted);
+    col.querySelector('.track-solo')?.classList.toggle('is-active', track.solo);
   });
 }
+
+// ── Transport & generation UI ─────────────────────────────────────────────────
 
 export function renderTransport(mashup) {
   const bpmInput = document.getElementById('bpm-input');
   if (bpmInput && document.activeElement !== bpmInput) {
     bpmInput.value = String(mashup.bpm ?? 120);
   }
-
   const master = document.getElementById('master-volume');
   const masterVol = mashup.masterVolume ?? 80;
-  if (master && document.activeElement !== master) {
-    master.value = String(masterVol);
-  }
-
+  if (master && document.activeElement !== master) master.value = String(masterVol);
   const label = document.getElementById('master-volume-label');
   if (label) label.textContent = `${Math.round(masterVol)}%`;
-
   const playBtn = document.getElementById('play-btn');
   if (playBtn) {
     playBtn.innerHTML = mashup.playing
@@ -252,37 +356,49 @@ export function renderGenerationUI(mashup, store) {
 
   const tracks = mashup.tracks || [];
   const gen = mashup.generation || { status: 'idle' };
+  const djMode = !!mashup.djMode;
 
-  if (tracks.length < 2) {
-    hint.textContent = 'Add at least two songs to the mixer, then assign components (each component only once across tracks).';
+  if (djMode) {
+    if (tracks.length < 2) {
+      hint.textContent = 'Add at least two songs to the mixer for DJ mode.';
+    } else {
+      const cf = mashup.djCrossfadeDuration ?? 4;
+      if (mashup.djAutoTiming) {
+        const swaps = mashup.djNSwaps ?? 4;
+        hint.textContent = `DJ mode — ${tracks.length} tracks, auto timing (${swaps} swaps), ${cf}s crossfade.`;
+      } else {
+        const seg = mashup.djSegmentDuration ?? 30;
+        hint.textContent = `DJ mode — ${tracks.length} tracks, ${seg}s segments, ${cf}s crossfade. Drag to reorder play sequence.`;
+      }
+    }
+  } else if (tracks.length < 2) {
+    hint.textContent = 'Add at least two songs to the mixer, then pick one source per row.';
   } else if (!tracks.every((t) => (t.claimedComponents || []).length > 0)) {
-    hint.textContent = 'Each track must claim at least one component. Components are exclusive—only one track may use Melody, Drums, etc.';
+    hint.textContent = 'Each track must claim at least one component row.';
   } else if (!canGenerateMashup(tracks)) {
-    hint.textContent = 'Fix overlapping components: each of the nine slots can only come from one track.';
+    hint.textContent = 'Fix overlapping components: each row can only come from one track.';
   } else {
-    hint.textContent =
-      'When ready, generate a single mixed file from your selections. Processing runs on the server (Demucs stems; mapping is approximate).';
+    hint.textContent = 'Ready — generate the full mix or preview a 30-second sample.';
   }
 
   const busy = gen.status === 'queued' || gen.status === 'running';
-  const canGen = canGenerateMashup(tracks);
+  const canGen = djMode ? tracks.length >= 2 : canGenerateMashup(tracks);
   const isSample = !!gen.isSample;
 
-  // Only the button that triggered the job shows "Working…"; the other is just disabled
   btn.disabled = busy || !canGen;
-  btn.textContent = (busy && !isSample) ? 'Working…' : 'Generate mashup';
+  btn.textContent = busy && !isSample ? 'Working…' : (djMode ? 'Generate DJ Mix' : 'Generate mashup');
 
   const sampleBtnEl = document.getElementById('sample-mashup-btn');
   if (sampleBtnEl) {
     sampleBtnEl.disabled = busy || !canGen;
-    sampleBtnEl.textContent = (busy && isSample) ? 'Working…' : 'Sample';
+    sampleBtnEl.textContent = busy && isSample ? 'Working…' : (djMode ? 'Sample DJ' : 'Sample');
   }
 
-  if (gen.status === 'idle') status.textContent = '';
-  else if (gen.status === 'queued') status.textContent = 'Queued…';
-  else if (gen.status === 'running') status.textContent = 'Separating and mixing…';
-  else if (gen.status === 'done') status.textContent = 'Done. Play from transport or download.';
-  else if (gen.status === 'error') status.textContent = gen.error || 'Generation failed.';
+  const promptBtnEl = document.getElementById('prompt-mashup-btn');
+  if (promptBtnEl) {
+    const hasComponents = tracks.some(t => (t.claimedComponents || []).length > 0);
+    promptBtnEl.disabled = !hasComponents;
+  }
 
   if (dl) {
     if (gen.status === 'done' && gen.resultUrl) {
@@ -293,19 +409,86 @@ export function renderGenerationUI(mashup, store) {
       delete dl.dataset.resultUrl;
     }
   }
+
+  if (gen.status === 'idle') status.textContent = '';
+  else if (gen.status === 'queued') status.textContent = 'Queued…';
+  else if (gen.status === 'running') status.textContent = isSample ? 'Generating sample…' : 'Separating and mixing…';
+  else if (gen.status === 'done') status.textContent = 'Done. Play from transport or download.';
+  else if (gen.status === 'error') status.textContent = gen.error || 'Generation failed.';
+
+  // ── Per-track analysis panel ─────────────────────────────────────────────
+  let analysisEl = document.getElementById('generation-analysis');
+  if (!analysisEl) {
+    analysisEl = document.createElement('div');
+    analysisEl.id = 'generation-analysis';
+    analysisEl.className = 'generation-analysis';
+    status.insertAdjacentElement('afterend', analysisEl);
+  }
+
+  const hasStemFiles = gen.stemFiles && Object.keys(gen.stemFiles).length > 0;
+
+  // Analysis panel: only show when stem editor is not visible (stem editor shows metadata inline)
+  const trackAnalysis = gen.trackAnalysis || [];
+  if (gen.status === 'done' && trackAnalysis.length && !hasStemFiles) {
+    const songs = store.getState().songs;
+    const rows = trackAnalysis.map((entry) => {
+      const track = tracks.find((t) => t.id === entry.track_id);
+      const song = track ? songs.find((s) => s.id === track.songId) : null;
+      const title = song?.title || entry.track_id;
+
+      const camelot = toCamelot(entry.detected_key ?? null, entry.detected_mode ?? null);
+      const keyStr = camelot
+        ? `<span class="gen-analysis__key">${escapeHtml(camelot)}</span>`
+        : '';
+
+      const targetBpm = Math.round(mashup.bpm ?? 120);
+      const bpmStr = entry.detected_bpm
+        ? `<span class="gen-analysis__bpm">${Math.round(entry.detected_bpm)}→${targetBpm} BPM</span>`
+        : '';
+
+      const shift = entry.semitones_shifted ?? 0;
+      const shiftWarn = Math.abs(shift) > 3 ? ' gen-analysis__shift--warn' : '';
+      const shiftStr = `<span class="gen-analysis__shift${shiftWarn}">${shift > 0 ? '+' : ''}${shift}st</span>`;
+
+      return `<div class="gen-analysis__track">
+        <span class="gen-analysis__title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
+        ${keyStr}${bpmStr}${shiftStr}
+      </div>`;
+    }).join('');
+
+    analysisEl.innerHTML = rows;
+    analysisEl.hidden = false;
+  } else {
+    analysisEl.hidden = true;
+    analysisEl.innerHTML = '';
+  }
+
+  // ── Stem timeline editor — full-width, outside the flex actions row ──────────
+  let stemEditorEl = document.getElementById('stem-editor-container');
+  if (!stemEditorEl) {
+    stemEditorEl = document.createElement('div');
+    stemEditorEl.id = 'stem-editor-container';
+    const generateBar = document.getElementById('mixer-generate-bar');
+    (generateBar ?? analysisEl).insertAdjacentElement('afterend', stemEditorEl);
+  }
+  if (gen.status === 'done' && hasStemFiles) {
+    initStemEditor(stemEditorEl, gen, mashup, store);
+  } else {
+    stemEditorEl.innerHTML = '';
+  }
 }
 
 export function setupKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
     if (e.code !== 'Space') return;
     const t = e.target;
-    if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable) {
-      return;
-    }
+    if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable) return;
     e.preventDefault();
     playPause();
   });
 }
+
+// ── initMixer ─────────────────────────────────────────────────────────────────
 
 export function initMixer(store) {
   const playBtn = document.getElementById('play-btn');
@@ -321,7 +504,6 @@ export function initMixer(store) {
   playBtn?.addEventListener('click', () => playPause());
   stopBtn?.addEventListener('click', () => stop());
 
-  // Blob-based download so it works cross-origin (page on :8080, API on :8000)
   dlBtn?.addEventListener('click', async (e) => {
     e.preventDefault();
     const url = dlBtn.dataset.resultUrl;
@@ -336,7 +518,7 @@ export function initMixer(store) {
       a.download = 'mashup.mp3';
       a.click();
       setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
-    } catch (err) {
+    } catch {
       showToast('Download failed. Try right-clicking and Save As.', 'error');
     } finally {
       dlBtn.textContent = 'Download MP3';
@@ -350,7 +532,6 @@ export function initMixer(store) {
     store.updateMashup({ bpm: v });
   });
 
-  // Auto-set BPM to the average of tracks' Spotify BPMs when user hasn't touched it
   store.subscribe((state) => {
     if (userSetBpm) return;
     const trackedSongs = state.mashup.tracks
@@ -359,9 +540,7 @@ export function initMixer(store) {
     const avg = smartDefaultBpm(trackedSongs);
     if (avg && avg !== (state.mashup.bpm ?? 120)) {
       store.updateMashup({ bpm: avg });
-      if (bpmInput && document.activeElement !== bpmInput) {
-        bpmInput.value = String(avg);
-      }
+      if (bpmInput && document.activeElement !== bpmInput) bpmInput.value = String(avg);
     }
   });
 
@@ -371,20 +550,92 @@ export function initMixer(store) {
     store.updateMashup({ masterVolume: v });
   });
 
-  genBtn?.addEventListener('click', () => {
-    startMashupGeneration(store);
+  genBtn?.addEventListener('click', () => startMashupGeneration(store));
+  sampleBtn?.addEventListener('click', () => startMashupGeneration(store, { sample: true }));
+
+  // DJ Mode toggle
+  const djBtn = document.getElementById('dj-mode-btn');
+  djBtn?.addEventListener('click', () => {
+    const current = store.getState().mashup.djMode;
+    store.updateMashup({ djMode: !current });
+    djBtn.classList.toggle('dj-mode-btn--active', !current);
   });
 
-  sampleBtn?.addEventListener('click', () => {
-    startMashupGeneration(store, { sample: true });
+  // Keep DJ Mode button enabled/disabled and active class in sync
+  store.subscribe((state) => {
+    if (!djBtn) return;
+    const hasTracks = state.mashup.tracks.length >= 2;
+    djBtn.disabled = !hasTracks;
+    if (!hasTracks && state.mashup.djMode) {
+      store.updateMashup({ djMode: false });
+    }
+    djBtn.classList.toggle('dj-mode-btn--active', !!state.mashup.djMode);
   });
 
+  // DJ settings inputs (delegated — inputs live inside the grid)
+  mixerTracks?.addEventListener('change', (e) => {
+    if (e.target.id === 'dj-segment-input') {
+      const v = Math.max(5, Math.min(300, Number(e.target.value) || 30));
+      e.target.value = String(v);
+      store.updateMashup({ djSegmentDuration: v });
+    } else if (e.target.id === 'dj-crossfade-input') {
+      const v = Math.max(1, Math.min(30, Number(e.target.value) || 4));
+      e.target.value = String(v);
+      store.updateMashup({ djCrossfadeDuration: v });
+    } else if (e.target.id === 'dj-auto-input') {
+      store.updateMashup({ djAutoTiming: e.target.checked });
+    } else if (e.target.id === 'dj-swaps-input') {
+      const v = Math.max(2, Math.min(20, Number(e.target.value) || 4));
+      e.target.value = String(v);
+      store.updateMashup({ djNSwaps: v });
+    }
+  });
+
+  const promptBtn = document.getElementById('prompt-mashup-btn');
+  const promptOverlay = document.getElementById('prompt-overlay');
+  const promptText = document.getElementById('prompt-dialog-text');
+  const promptCopy = document.getElementById('prompt-dialog-copy');
+  const promptClose = document.getElementById('prompt-dialog-close');
+  const promptCloseBtn = document.getElementById('prompt-dialog-close-btn');
+
+  function closePromptModal() {
+    if (promptOverlay) promptOverlay.hidden = true;
+  }
+
+  promptBtn?.addEventListener('click', () => {
+    const prompt = generateMusicPrompt(store.getState());
+    if (!prompt) { showToast('Select at least one component to generate a prompt.', 'info'); return; }
+    if (promptText) promptText.value = prompt;
+    if (promptOverlay) promptOverlay.hidden = false;
+    promptText?.focus();
+    promptText?.select();
+  });
+
+  promptClose?.addEventListener('click', closePromptModal);
+  promptCloseBtn?.addEventListener('click', closePromptModal);
+  promptOverlay?.addEventListener('click', (e) => { if (e.target === promptOverlay) closePromptModal(); });
+
+  promptCopy?.addEventListener('click', async () => {
+    const text = promptText?.value;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      promptCopy.textContent = 'Copied!';
+      setTimeout(() => { if (promptCopy) promptCopy.textContent = 'Copy Prompt'; }, 2000);
+    } catch {
+      showToast('Copy failed — select all text and copy manually.', 'error');
+    }
+  });
+
+  // ── Event delegation on mixer-tracks ────────────────────────────────
+
+  // Component cell toggle
   mixerTracks?.addEventListener('click', async (e) => {
-    const chip = e.target.closest('.component-chip');
-    if (chip && mixerTracks.contains(chip)) {
-      const row = chip.closest('.mixer-track');
-      const trackId = row?.dataset.trackId;
-      const compId = chip.dataset.componentId;
+    // Component cell
+    const cell = e.target.closest('.mixer-grid__cell');
+    if (cell && !cell.disabled) {
+      const trackId = cell.dataset.trackId;
+      const compId = cell.dataset.componentId;
       if (trackId && compId) {
         const r = store.toggleTrackComponent(trackId, compId);
         if (!r.ok && r.reason === 'taken') {
@@ -394,81 +645,67 @@ export function initMixer(store) {
       return;
     }
 
-    const row = e.target.closest('.mixer-track');
-    if (!row) return;
-    const trackId = row.dataset.trackId;
-    const btn = e.target.closest('button');
-    if (!btn || btn.classList.contains('mixer-track__handle')) return;
+    // Header buttons (mute / solo / remove)
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    const col = btn.closest(TRACK_CELL_SEL);
+    if (!col) return;
+    const trackId = col.dataset.trackId;
+    const action = btn.dataset.action;
 
-    if (btn.classList.contains('track-mute')) {
+    if (action === 'mute') {
       const tr = store.getState().mashup.tracks.find((t) => t.id === trackId);
       if (tr) store.updateTrack(trackId, { muted: !tr.muted });
-      return;
-    }
-
-    if (btn.classList.contains('track-solo')) {
+    } else if (action === 'solo') {
       const tr = store.getState().mashup.tracks.find((t) => t.id === trackId);
       if (tr) store.updateTrack(trackId, { solo: !tr.solo });
-      return;
-    }
-
-    if (btn.classList.contains('track-remove')) {
+    } else if (action === 'remove') {
       let ok = true;
       if (typeof window.showConfirm === 'function') {
         ok = await window.showConfirm('Remove this track from the mixer?', { title: 'Remove track' });
       }
-      if (ok) {
-        store.removeTrack(trackId);
-        showToast('Track removed.', 'info');
-      }
+      if (ok) { store.removeTrack(trackId); showToast('Track removed.', 'info'); }
     }
   });
 
+  // Volume slider
   mixerTracks?.addEventListener('input', (e) => {
     const vol = e.target.closest('.track-volume');
     if (!vol) return;
-    const row = vol.closest('.mixer-track');
-    const trackId = row?.dataset.trackId;
-    if (!trackId) return;
-    store.updateTrack(trackId, { volume: Number(vol.value) });
+    const col = vol.closest(TRACK_CELL_SEL);
+    const trackId = col?.dataset.trackId;
+    if (trackId) store.updateTrack(trackId, { volume: Number(vol.value) });
   });
 
+  // Drag-to-reorder tracks
+  let dragFromId = null;
+
   mixerTracks?.addEventListener('dragstart', (e) => {
-    if (e.target.closest('.component-chip')) {
-      e.preventDefault();
-      return;
-    }
-    const row = e.target.closest('.mixer-track');
-    if (!row) return;
-    e.dataTransfer.setData('application/x-track-id', row.dataset.trackId);
+    const col = e.target.closest(TRACK_CELL_SEL);
+    if (!col) return;
+    dragFromId = col.dataset.trackId;
     e.dataTransfer.effectAllowed = 'move';
-    row.classList.add('mixer-track--dragging');
+    col.classList.add('mixer-col--dragging');
   });
 
   mixerTracks?.addEventListener('dragend', (e) => {
-    const row = e.target.closest('.mixer-track');
-    row?.classList.remove('mixer-track--dragging');
+    e.target.closest(TRACK_CELL_SEL)?.classList.remove('mixer-col--dragging');
+    dragFromId = null;
   });
 
   mixerTracks?.addEventListener('dragover', (e) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = e.dataTransfer.types.includes('application/x-mashup-song-id')
-      ? 'copy'
-      : 'move';
+      ? 'copy' : 'move';
   });
 
   mixerTracks?.addEventListener('drop', (e) => {
     e.preventDefault();
     const songId = e.dataTransfer.getData('application/x-mashup-song-id');
-    if (songId) {
-      addSongToMixer(store, songId);
-      return;
-    }
-
-    const fromId = e.dataTransfer.getData('application/x-track-id');
-    const targetRow = e.target.closest('.mixer-track');
-    if (fromId && targetRow?.dataset.trackId) {
-      reorderTracks(store, fromId, targetRow.dataset.trackId);
+    if (songId) { addSongToMixer(store, songId); return; }
+    const col = e.target.closest(TRACK_CELL_SEL);
+    if (dragFromId && col?.dataset.trackId) {
+      reorderTracks(store, dragFromId, col.dataset.trackId);
     }
   });
 }

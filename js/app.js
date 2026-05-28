@@ -5,12 +5,25 @@
 import { createStore } from './state.js';
 import { setupSongInput, renderSongs, initSongSearch, setupToastListener, setMatchFilter, clearMatchFilter } from './ui.js';
 import { initMixer, renderTracks, renderTransport, renderGenerationUI, setupKeyboardShortcuts } from './mixer.js';
-import { initAudio } from './audio.js';
+import { initAudio, setMashupResultUrl } from './audio.js';
 import { initCatalog } from './catalog.js';
 import { camelotDistance, bpmStretchPct } from './compatibility.js';
 
 // Create the global store
 const store = createStore();
+
+// Load library from backend JSON (authoritative), fall back to localStorage
+(async () => {
+  try {
+    const res = await fetch(`${window.MASHUP_API_BASE || 'http://127.0.0.1:8000'}/api/library`);
+    if (res.ok) {
+      const songs = await res.json();
+      if (Array.isArray(songs) && songs.length > 0) {
+        store.setState({ songs });
+      }
+    }
+  } catch { /* backend not running — localStorage fallback stays */ }
+})();
 
 // Setup toast listener (for events from components/mixer modules)
 setupToastListener();
@@ -24,6 +37,12 @@ initMixer(store);
 
 // Wire result audio element and waveform animation
 initAudio(store);
+
+// Restore audio player URL from persisted generation state
+const _initGen = store.getState().mashup.generation;
+if (_initGen.resultUrl) {
+  setMashupResultUrl(_initGen.resultUrl);
+}
 
 // Setup keyboard shortcuts (Space = play/pause)
 setupKeyboardShortcuts();
@@ -84,9 +103,27 @@ document.addEventListener('mashup:search', () => renderSongs(store.getState().so
           camelotDistance(ms.key, ms.mode, candidate.key, candidate.mode) <= 1;
         const bpmGood = !ms.bpm || !candidate.bpm ||
           bpmStretchPct(candidate.bpm, targetBpm) <= 10;
-        return keyGood && bpmGood;
+        const energyGood = ms.energy == null || candidate.energy == null ||
+          Math.abs(ms.energy - candidate.energy) <= 0.25;
+        const valenceGood = ms.valence == null || candidate.valence == null ||
+          Math.abs(ms.valence - candidate.valence) <= 0.3;
+        return keyGood && bpmGood && energyGood && valenceGood;
       });
       if (isGreat) goodCount++; else okCount++;
+    }
+
+    // Open the library drawer
+    const drawer = document.getElementById('song-input-section');
+    if (drawer) {
+      drawer.classList.add('library-drawer--open');
+      document.body.classList.add('library-open');
+    }
+
+    // Clear any existing search text so all matches are visible
+    const searchInput = document.getElementById('song-search');
+    if (searchInput && searchInput.value) {
+      searchInput.value = '';
+      searchInput.dispatchEvent(new Event('input'));
     }
 
     active = true;
@@ -166,6 +203,50 @@ function resizeWaveformCanvas() {
 
 window.addEventListener('resize', resizeWaveformCanvas);
 resizeWaveformCanvas();
+
+// Library drawer toggle + hover-to-open
+(function initLibraryDrawer() {
+  const drawer    = document.getElementById('song-input-section');
+  const backdrop  = document.getElementById('library-backdrop');
+  const toggleBtn = document.getElementById('library-toggle-btn');
+  const closeBtn  = document.getElementById('library-close-btn');
+  const edgeTip   = document.getElementById('library-edge-trigger');
+  if (!drawer) return;
+
+  let closeTimer = null;
+
+  function open() {
+    clearTimeout(closeTimer);
+    drawer.classList.add('library-drawer--open');
+    document.body.classList.add('library-open');
+  }
+  function close() {
+    drawer.classList.remove('library-drawer--open');
+    document.body.classList.remove('library-open');
+  }
+  function scheduleClose() {
+    clearTimeout(closeTimer);
+    closeTimer = setTimeout(close, 320);
+  }
+  function cancelClose() {
+    clearTimeout(closeTimer);
+  }
+
+  // Click toggle
+  toggleBtn?.addEventListener('click', () =>
+    drawer.classList.contains('library-drawer--open') ? close() : open()
+  );
+  backdrop?.addEventListener('click', close);
+  closeBtn?.addEventListener('click', close);
+
+  // Hover open: thin left-edge strip triggers open
+  edgeTip?.addEventListener('mouseenter', open);
+  edgeTip?.addEventListener('mouseleave', scheduleClose);
+
+  // Keep open while mouse is inside the drawer
+  drawer.addEventListener('mouseenter', cancelClose);
+  drawer.addEventListener('mouseleave', scheduleClose);
+})();
 
 // Welcome message
 console.log(

@@ -14,20 +14,32 @@ function apiBase() {
 function buildPayload(store, { sample = false } = {}) {
   const state = store.getState();
   const tracks = [...state.mashup.tracks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+  // Resolve solo: if any track is soloed, non-soloed tracks are effectively muted
+  const anySolo = tracks.some(t => t.solo);
+
+  const djMode = !!state.mashup.djMode;
   return {
     bpm: state.mashup.bpm ?? 120,
     master_volume: (state.mashup.masterVolume ?? 80) / 100,
     sample,
+    mode: djMode ? 'dj' : 'mashup',
+    segment_duration: state.mashup.djSegmentDuration ?? 30,
+    crossfade_duration: state.mashup.djCrossfadeDuration ?? 4,
+    dj_auto_timing: !!(state.mashup.djAutoTiming),
+    dj_n_swaps: state.mashup.djNSwaps ?? 4,
     tracks: tracks.map((t) => {
       const song = state.songs.find((s) => s.id === t.songId);
+      const effectiveMute = !!t.muted || (anySolo && !t.solo);
       return {
         track_id: t.id,
         video_id: song?.videoId || '',
         components: t.claimedComponents || [],
         volume: (t.volume ?? 80) / 100,
-        muted: !!t.muted,
+        muted: effectiveMute,
         key: song?.key ?? null,
-        mode: song?.mode ?? null
+        mode: song?.mode ?? null,
+        hint_bpm: song?.bpm ?? null,
       };
     })
   };
@@ -51,11 +63,25 @@ async function pollJob(jobId, store) {
 
     if (data.status === 'done' && data.download_url) {
       const url = data.download_url.startsWith('http') ? data.download_url : `${base}${data.download_url}`;
+      // Prefix relative stem URLs with backend base so fetches go to the right origin
+      const rawStemFiles = data.stem_files ?? {};
+      const stemFiles = {};
+      for (const [tid, stems] of Object.entries(rawStemFiles)) {
+        stemFiles[tid] = {};
+        for (const [sname, meta] of Object.entries(stems)) {
+          stemFiles[tid][sname] = {
+            ...meta,
+            url: meta.url.startsWith('http') ? meta.url : `${base}${meta.url}`
+          };
+        }
+      }
       store.setGeneration({
         status: 'done',
         jobId,
         resultUrl: url,
-        error: null
+        error: null,
+        trackAnalysis: data.track_analysis ?? [],
+        stemFiles
       });
       setMashupResultUrl(url);
       showToast('Mashup ready. Press play or download.', 'success');
@@ -72,6 +98,41 @@ async function pollJob(jobId, store) {
   throw new Error('Timed out waiting for mashup job.');
 }
 
+export function getTrackEdit(gen, trackId) {
+  const e = gen.stemEdits?.[trackId];
+  if (e && typeof e.offset === 'number') return e;
+  return { offset: 0, start_trim: 0, end_trim: 0, volume: 1.0 };
+}
+
+export async function remixMashup(store) {
+  const { generation: gen } = store.getState().mashup;
+  if (!gen.jobId) return;
+  store.setGeneration({ status: 'running' });
+  try {
+    const res = await fetch(`${apiBase()}/api/mashup/remix/${gen.jobId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ edits: gen.stemEdits ?? {} })
+    });
+    if (!res.ok) {
+      let detail = `${res.status}`;
+      try { const j = await res.json(); detail = j.detail || JSON.stringify(j); } catch { detail = await res.text().catch(() => detail); }
+      throw new Error(`Remix failed: ${detail}`);
+    }
+    const data = await res.json();
+    const url = data.download_url.startsWith('http')
+      ? data.download_url
+      : `${apiBase()}${data.download_url}`;
+    store.setGeneration({ status: 'done', resultUrl: url });
+    setMashupResultUrl(url);
+    showToast('Remix ready.', 'success');
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    store.setGeneration({ status: 'error', error: message });
+    showToast(message, 'error');
+  }
+}
+
 export async function startMashupGeneration(store, { sample = false } = {}) {
   const state = store.getState();
 
@@ -79,12 +140,17 @@ export async function startMashupGeneration(store, { sample = false } = {}) {
   const { status } = state.mashup.generation;
   if (status === 'queued' || status === 'running') return;
 
-  if (!canGenerateMashup(state.mashup.tracks)) {
+  const djMode = !!state.mashup.djMode;
+  if (!djMode && !canGenerateMashup(state.mashup.tracks)) {
     showToast('Add two or more tracks and assign exclusive components.', 'info');
     return;
   }
+  if (djMode && state.mashup.tracks.length < 2) {
+    showToast('Add at least two tracks for DJ mode.', 'info');
+    return;
+  }
 
-  store.setGeneration({ status: 'queued', jobId: null, resultUrl: null, error: null, isSample: sample });
+  store.setGeneration({ status: 'queued', jobId: null, resultUrl: null, error: null, isSample: sample, stemFiles: {}, stemEdits: {} });
   setMashupResultUrl(null);
 
   try {
