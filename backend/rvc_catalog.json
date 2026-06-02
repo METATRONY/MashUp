@@ -1,0 +1,149 @@
+[
+  {
+    "id": "adele",
+    "name": "Adele",
+    "genre": "Pop/Soul",
+    "gender": "female",
+    "model_url": "https://huggingface.co/Fonre/RVC-Models/resolve/main/Adele%20(2011-2015)%20-%20Weights.gg%20Model.zip"
+  },
+  {
+    "id": "taylor_swift",
+    "name": "Taylor Swift",
+    "genre": "Pop/Country",
+    "gender": "female",
+    "model_url": "https://huggingface.co/Fonre/RVC-Models/resolve/main/taylor%20swift400%20-%20Weights.gg%20Model.zip"
+  },
+  {
+    "id": "ariana_grande",
+    "name": "Ariana Grande",
+    "genre": "Pop/R&B",
+    "gender": "female",
+    "model_url": "https://huggingface.co/Fonre/RVC-Models/resolve/main/Ariana%20Grande%20AI%20-%20Weights.gg%20Model.zip"
+  },
+  {
+    "id": "billie_eilish",
+    "name": "Billie Eilish",
+    "genre": "Alt Pop",
+    "gender": "female",
+    "model_url": "https://huggingface.co/Fonre/RVC-Models/resolve/main/Billie%20Eilish%20(Hit%20Me%20Hard%20and%20Soft)%20-%20Weights%20Model.zip"
+  },
+  {
+    "id": "rihanna",
+    "name": "Rihanna",
+    "genre": "Pop/R&B",
+    "gender": "female",
+    "model_url": "https://huggingface.co/Fonre/RVC-Models/resolve/main/Rihanna%20(2009-2012)%20-%20Weights.gg%20Model.zip"
+  },
+  {
+    "id": "shakira",
+    "name": "Shakira",
+    "genre": "Pop/Latin",
+    "gender": "female",
+    "model_url": "https://huggingface.co/Fonre/RVC-Models/resolve/main/Shakira%20-%20Weights.gg%20Model.zip"
+  },
+  {
+    "id": "lana_del_rey",
+    "name": "Lana Del Rey",
+    "genre": "Indie Pop",
+    "gender": "female",
+    "model_url": "https://huggingface.co/Fonre/RVC-Models/resolve/main/Lana%20Del%20Rey%20(2019-2021)%20-%20Weights.gg%20Model.zip"
+  },
+  {
+    "id": "travis_scott",
+    "name": "Travis Scott",
+    "genre": "Hip-Hop/Trap",
+    "gender": "male",
+    "model_url": "https://huggingface.co/Fonre/RVC-Models/resolve/main/Travis%20Scott%20%5BUTOPIA%20ERA%5D%20-%20Weights.gg%20Model.zip"
+  },
+  {
+    "id": "eminem",
+    "name": "Eminem",
+    "genre": "Hip-Hop",
+    "gender": "male",
+    "model_url": "https://huggingface.co/QuickWick/Music-AI-Voices/resolve/main/Eminem%20(New%20Era)%20(RVC)%201k%20Epoch/Eminem%20(New%20Era)%20(RVC)%201k%20Epoch.zip"
+  },
+  {
+    "id": "michael_jackson",
+    "name": "Michael Jackson",
+    "genre": "Pop/R&B",
+    "gender": "male",
+    "model_url": "https://huggingface.co/QuickWick/Music-AI-Voices/resolve/main/Michael%20Jackson%20(RVC)%20(1979-1984%20Era)%201k%20Epoch/Michael%20Jackson%20(RVC)%20(1979-1984%20Era)%201k%20Epoch.zip"
+  },
+  {
+    "id": "freddie_mercury",
+    "name": "Freddie Mercury",
+    "genre": "Rock",
+    "gender": "male",
+    "model_url": "https://huggingface.co/QuickWick/Music-AI-Voices/resolve/main/Freddie%20Mercury%20(RVC)%20Unknown%20Steps/Freddie%20Mercury%20(RVC)%20Unknown%20Steps.zip"
+  },
+  {
+    "id": "ed_sheeran",
+    "name": "Ed Sheeran",
+    "genre": "Pop",
+    "gender": "male",
+    "model_url": "https://huggingface.co/QuickWick/Music-AI-Voices/resolve/main/Ed%20Sheeran%20(RVC)%201000%20Epoch/Ed%20Sheeran%20(RVC)%201000%20Epoch.zip"
+  },
+  {
+    "id": "frank_sinatra",
+    "name": "Frank Sinatra",
+    "genre": "Jazz/Pop",
+    "gender": "male",
+    "model_url": "https://huggingface.co/QuickWick/Music-AI-Voices/resolve/main/Frank%20Sinatra%20(RVC)%20250%20Epoch%2051.6k%20Steps/Frank%20Sinatra%20(RVC)%20250%20Epoch%2051.6k%20Steps.zip"
+  },
+  {
+    "id": "the_weeknd",
+    "name": "The Weeknd",
+    "genre": "R&B/Pop",
+    "gender": "male",
+    "model_url": "https://huggingface.co/QuickWick/Music-AI-Voices/resolve/main/The%20Weeknd%20(RVC)%201k%20Epoch/The%20Weeknd%20(RVC)%201k%20Epoch.zip"
+  },
+  {
+    "id": "drake",
+    "name": "Drake",
+    "genre": "Hip-Hop/R&B",
+    "gender": "male",
+    "model_url": "https://huggingface.co/QuickWick/Music-AI-Voices/resolve/main/Drake%20(RVC)%20Unknown%20Steps/Drake%20(RVC)%20Unknown.zip"
+  },
+  {
+    "id": "justin_bieber",
+    "name": "Justin Bieber",
+    "genre": "Pop",
+    "gender": "male",
+    "model_url": "https://huggingface.co/QuickWick/Music-AI-Voices/resolve/main/Justin%20Bieber%20(RVC)%20250%20Epoch/justinbiebermodel.zip"
+  },
+  {
+    "id": "britney_spears",
+    "name": "Britney Spears",
+    "genre": "Pop",
+    "gender": "female",
+    "model_url": "https://huggingface.co/QuickWick/Music-AI-Voices/resolve/main/Britney%20Spears%20(RVC)%20500%20Epoch/Britney%20Spears%20(RVC)%20500%20Epoch.zip"
+  },
+  {
+    "id": "kurt_cobain",
+    "name": "Kurt Cobain",
+    "genre": "Grunge/Rock",
+    "gender": "male",
+    "model_url": "https://huggingface.co/QuickWick/Music-AI-Voices/resolve/main/Kurt%20Cobain%20138.6k/Kurt%20Cobain%20138.6k.zip"
+  },
+  {
+    "id": "snoop_dogg",
+    "name": "Snoop Dogg",
+    "genre": "Hip-Hop",
+    "gender": "male",
+    "model_url": "https://huggingface.co/QuickWick/Music-AI-Voices/resolve/main/Snoop%20Dogg%20(RVC)%20250%20Epoch/Snoop%20Dogg%20(RVC)%20250%20Epoch.zip"
+  },
+  {
+    "id": "bad_bunny",
+    "name": "Bad Bunny",
+    "genre": "Reggaeton/Latin",
+    "gender": "male",
+    "model_url": "https://huggingface.co/QuickWick/Music-AI-Voices/resolve/main/Bad%20Bunny%20(RVC)%201k%20Epoch/Bad%20Bunny%20(RVC)%201k%20Epoch.zip"
+  },
+  {
+    "id": "jungkook",
+    "name": "Jungkook (BTS)",
+    "genre": "K-Pop",
+    "gender": "male",
+    "model_url": "https://huggingface.co/QuickWick/Music-AI-Voices/resolve/main/Jung%20Kook%20(RVC)%20v3%20Apr%2025/Jung%20Kook%20(RVC)%20v3%20Apr%2025.zip"
+  }
+]

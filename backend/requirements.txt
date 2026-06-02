@@ -9,10 +9,15 @@ torch>=2.0.0
 torchcodec>=0.1.0
 yt-dlp>=2024.1.0
 python-dotenv>=1.0.0
+python-multipart>=0.0.9
 # Music enrichment
 spotipy>=2.23.0
 lyricsgenius>=3.0.1
 librosa>=0.10.0
-essentia>=2.1b6  # better BPM (RhythmExtractor2013) and key (KeyExtractor) than librosa
+essentia>=2.1b5  # better BPM (RhythmExtractor2013) and key (KeyExtractor) than librosa
 mido>=1.3.0
 pyrubberband>=0.3.0  # high-quality time-stretch and pitch-shift (wraps the Rubber Band Library)
+pyworld>=0.3.2       # WORLD vocoder for singing voice conversion
+torchcrepe==0.0.20   # required by infer-rvc-python at import time (even when using pm pitch)
+transformers>=4.30.0 # required by fairseq_stub.py (HuBERT model stub)
+modal>=1.0.0         # optional: GPU inference on Modal.com (MASHUP_USE_MODAL=1)

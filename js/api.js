@@ -133,6 +133,76 @@ export async function remixMashup(store) {
   }
 }
 
+export async function startVoiceReplace(store, {
+  sample = false,
+  vocalGain = 2.0,
+  artistId = null,
+  voiceIdOverride = null,
+  pitchShift = 0,
+} = {}) {
+  const state = store.getState();
+  const { status } = state.mashup.generation;
+  if (status === 'queued' || status === 'running') return;
+
+  const voiceId = voiceIdOverride ?? state.mashup.voiceId;
+
+  if (!artistId && !voiceId) {
+    showToast('Select an artist or record your voice first.', 'info');
+    return;
+  }
+
+  const tracks = state.mashup.tracks;
+  if (!tracks.length) { showToast('Add a song to the mixer first.', 'info'); return; }
+
+  const firstTrack = [...tracks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))[0];
+  const song = state.songs.find((s) => s.id === firstTrack.songId);
+  if (!song?.videoId) { showToast('Could not find a song to process.', 'info'); return; }
+
+  store.setGeneration({ status: 'queued', jobId: null, resultUrl: null, error: null, isSample: sample, stemFiles: {}, stemEdits: {} });
+  setMashupResultUrl(null);
+
+  try {
+    const base = apiBase();
+    const body = {
+      video_id: song.videoId,
+      sample,
+      hint_bpm: song.bpm ?? null,
+      key: song.key ?? null,
+      mode: song.mode ?? null,
+      vocal_gain: vocalGain,
+      pitch_shift: pitchShift,
+    };
+    if (artistId) {
+      body.artist_id = artistId;
+    } else {
+      body.voice_id = voiceId;
+    }
+
+    const res = await fetch(`${base}/api/voice-replace`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      let msg = errText;
+      try { const j = JSON.parse(errText); msg = j.detail || j.message || msg; } catch { /* use text */ }
+      throw new Error(msg || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    if (!data.job_id) throw new Error('No job id returned');
+
+    store.setGeneration({ status: 'running', jobId: data.job_id });
+    await pollJob(data.job_id, store);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    store.setGeneration({ status: 'error', error: message, resultUrl: null });
+    showToast(message, 'error');
+  }
+}
+
 export async function startMashupGeneration(store, { sample = false } = {}) {
   const state = store.getState();
 

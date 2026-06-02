@@ -30,6 +30,7 @@ function persistMixer(mashup) {
         djCrossfadeDuration: mashup.djCrossfadeDuration,
         djAutoTiming: mashup.djAutoTiming,
         djNSwaps: mashup.djNSwaps,
+        voiceId: mashup.voiceId ?? null,
         generation: gen.status === 'done' ? {
           jobId: gen.jobId,
           resultUrl: gen.resultUrl,
@@ -96,6 +97,7 @@ export function createStore() {
       djCrossfadeDuration: saved?.djCrossfadeDuration ?? 4,
       djAutoTiming:        saved?.djAutoTiming        ?? false,
       djNSwaps:            saved?.djNSwaps            ?? 4,
+      voiceId:             saved?.voiceId             ?? null,
       playing: false,
       currentTime: 0,
       generation: savedGen ? {
@@ -260,6 +262,11 @@ export function createStore() {
         ...state,
         mashup: { ...state.mashup, ...updates }
       };
+      notify();
+    },
+
+    setVoiceId(voiceId) {
+      state = { ...state, mashup: { ...state.mashup, voiceId: voiceId ?? null } };
       notify();
     },
 

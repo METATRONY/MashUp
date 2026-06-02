@@ -8,6 +8,7 @@ import { initMixer, renderTracks, renderTransport, renderGenerationUI, setupKeyb
 import { initAudio, setMashupResultUrl } from './audio.js';
 import { initCatalog } from './catalog.js';
 import { camelotDistance, bpmStretchPct } from './compatibility.js';
+import { initVoiceModal } from './voice.js';
 
 // Create the global store
 const store = createStore();
@@ -34,6 +35,9 @@ initSongSearch();
 
 // Initialize mixer (transport wiring)
 initMixer(store);
+
+// Initialize voice replace modal
+initVoiceModal(store);
 
 // Wire result audio element and waveform animation
 initAudio(store);

@@ -226,6 +226,27 @@
           <button type="button" class="btn btn-secondary" id="sample-mashup-btn" disabled title="Generate a 30-second preview">
             Sample
           </button>
+          <button type="button" class="btn btn-secondary" id="karaoke-btn"
+            title="Sing along to any song in your library with live lyrics">
+            <svg width="13" height="13"><use href="#icon-solo"/></svg>
+            Karaoke
+          </button>
+          <button type="button" class="btn btn-secondary" id="voice-replace-btn"
+            title="Record or upload your voice to replace the vocals">
+            <svg width="13" height="13"><use href="#icon-solo"/></svg>
+            Replace Vocals
+          </button>
+          <button type="button" class="btn btn-primary" id="generate-voice-btn"
+            style="display:none" disabled
+            title="Generate the song with your voice replacing the original vocals">
+            Generate with My Voice
+          </button>
+          <label class="vocal-gain-label" id="vocal-gain-label" style="display:none">
+            Vocal Vol:
+            <input type="range" id="vocal-gain-slider" min="0.5" max="4" step="0.1" value="2"
+              class="vocal-gain-slider" title="Vocal volume multiplier">
+            <span id="vocal-gain-value">2.0</span>×
+          </label>
           <button type="button" class="btn btn-secondary" id="prompt-mashup-btn" disabled title="Generate an AI music prompt for Lyria 3, Suno, Udio, etc.">
             Prompt
           </button>
@@ -287,6 +308,175 @@
     </div>
   </div>
 
-  <script type="module" src="js/app.js?v=42"></script>
+  <!-- Voice Replace Modal -->
+  <div class="voice-overlay" id="voice-overlay" hidden>
+    <div class="voice-dialog" role="dialog" aria-modal="true" aria-labelledby="voice-dialog-title">
+
+      <!-- Header -->
+      <div class="voice-dialog__header">
+        <h3 class="voice-dialog__title" id="voice-dialog-title">
+          <svg width="15" height="15"><use href="#icon-solo"/></svg>
+          Replace Vocals
+        </h3>
+        <button type="button" class="voice-dialog__close" id="voice-dialog-close" aria-label="Close">&times;</button>
+      </div>
+
+      <!-- Top-level tabs: Artist Voices | My Recording -->
+      <div class="voice-tabs-top" role="tablist">
+        <button class="voice-tab-top voice-tab-top--active" data-vtab="artist" role="tab" aria-selected="true">Artist Voices</button>
+        <button class="voice-tab-top" data-vtab="recording" role="tab" aria-selected="false">My Recording</button>
+      </div>
+
+      <!-- ── Artist Voices panel ── -->
+      <div id="voice-panel-artist">
+        <p class="voice-dialog__hint">Select an artist voice to apply to the song vocals.</p>
+        <p class="artist-catalog-loading" id="artist-catalog-loading">Loading artists&hellip;</p>
+        <div class="artist-catalog" id="artist-catalog" hidden></div>
+        <p class="artist-confirm-error" id="artist-confirm-error" hidden></p>
+      </div>
+
+      <!-- ── My Recording panel ── -->
+      <div id="voice-panel-recording" hidden>
+
+      <!-- Sub-tabs: Karaoke | Upload File | Train My Voice -->
+      <div class="voice-tabs" role="tablist">
+        <button class="voice-tab voice-tab--active" data-voice-tab="upload" role="tab" aria-selected="true">Upload File</button>
+        <button class="voice-tab" data-voice-tab="train" role="tab" aria-selected="false">Train My Voice</button>
+      </div>
+
+      <!-- ── Karaoke tab ── -->
+      <div class="voice-tab-content" id="voice-tab-karaoke">
+
+        <!-- Step 1: Song picker -->
+        <div class="voice-panel" id="voice-panel-pick">
+          <p class="voice-dialog__hint">Pick a song from your library. The app removes the vocals so you can sing along.</p>
+          <div class="voice-pick-empty" id="voice-pick-empty" hidden>
+            <p>No songs in your library yet — add songs first.</p>
+          </div>
+          <div class="voice-pick-controls" id="voice-pick-controls">
+            <select class="voice-song-select" id="voice-song-select" aria-label="Choose a song"></select>
+            <button type="button" class="btn btn-primary" id="voice-prep-song-btn">Prepare Song</button>
+          </div>
+        </div>
+
+        <!-- Step 2: Preparing instrumental -->
+        <div class="voice-panel" id="voice-panel-prep" hidden>
+          <div class="voice-prep-state">
+            <div class="voice-prep-spinner" aria-hidden="true"></div>
+            <p class="voice-prep-label">Preparing instrumental&hellip;</p>
+            <p class="voice-prep-subtext" id="voice-prep-subtext">Separating stems with Demucs. This may take a minute.</p>
+          </div>
+          <button type="button" class="btn btn-secondary voice-prep-back" id="voice-prep-back-btn">Cancel</button>
+        </div>
+
+        <!-- Step 3: Karaoke player + recording -->
+        <div class="voice-panel" id="voice-panel-karaoke" hidden>
+          <div class="voice-karaoke-player">
+            <div class="voice-karaoke-controls">
+              <span class="voice-karaoke-song-name" id="voice-karaoke-song-name"></span>
+              <input type="range" class="voice-karaoke-progress" id="voice-karaoke-progress"
+                min="0" max="100" value="0" step="0.1" aria-label="Playback position">
+            </div>
+            <div class="voice-karaoke-actions">
+              <button type="button" class="btn btn-primary" id="voice-karaoke-sing-btn">
+                <svg width="13" height="13"><use href="#icon-solo"/></svg>
+                Sing &amp; Record
+              </button>
+              <button type="button" class="btn btn-secondary" id="voice-karaoke-stop-btn" hidden>Stop Recording</button>
+              <span class="voice-record-live" id="voice-record-live" hidden aria-hidden="true"></span>
+              <span class="voice-karaoke-timer" id="voice-karaoke-timer" hidden>0:00</span>
+            </div>
+            <p class="voice-karaoke-hint">Use headphones to prevent echo &mdash; aim for at least 30 seconds.</p>
+            <p class="voice-karaoke-status" id="voice-karaoke-status"></p>
+          </div>
+          <div class="voice-lyrics-panel" id="voice-lyrics-panel">
+            <p class="voice-lyrics-nolyrics" id="voice-lyrics-nolyrics" hidden>No lyrics available for this song.</p>
+            <div class="voice-lyrics-text" id="voice-lyrics-text"></div>
+          </div>
+          <!-- Pitch-correct row (shown after a recording is made) -->
+          <div id="voice-pitch-row" hidden>
+            <button type="button" class="btn btn-secondary" id="voice-pitch-fix-btn">Fix My Pitch</button>
+            <p class="voice-pitch-status" id="voice-pitch-status"></p>
+            <audio id="voice-pitch-result-audio" controls hidden style="width:100%;margin-top:6px"></audio>
+          </div>
+          <button type="button" class="btn btn-secondary voice-karaoke-back" id="voice-karaoke-back-btn">&#8592; Choose different song</button>
+        </div>
+
+      </div><!-- /voice-tab-karaoke -->
+
+      <!-- ── Upload File tab ── -->
+      <div class="voice-tab-content" id="voice-tab-upload" hidden>
+        <p class="voice-dialog__hint">Upload an existing voice recording to replace the vocals.</p>
+        <label class="voice-upload-area">
+          <svg width="28" height="28"><use href="#icon-waveform"/></svg>
+          <span>Click or drag &amp; drop an audio file</span>
+          <span class="voice-upload-formats">WAV &middot; MP3 &middot; M4A &middot; OGG &middot; WEBM &mdash; max 50 MB</span>
+          <input type="file" accept="audio/*" id="voice-file-input" class="voice-file-input">
+        </label>
+      </div><!-- /voice-tab-upload -->
+
+      <!-- ── Train My Voice tab ── -->
+      <div class="voice-tab-content" id="voice-tab-train" hidden>
+        <p class="voice-dialog__hint">Upload 15–30 min of your singing or speaking voice to train a personal AI voice model.</p>
+        <div class="voice-train-name-row">
+          <label class="voice-train-name-label" for="voice-train-name">Voice name</label>
+          <input type="text" id="voice-train-name" class="voice-train-name-input" placeholder="e.g. My Singing Voice" maxlength="40">
+        </div>
+        <div class="voice-train-clips" id="voice-train-clips"></div>
+        <p class="voice-train-clip-count" id="voice-train-clip-count">No clips yet &mdash; 0:00 total</p>
+        <button type="button" class="btn btn-secondary" id="voice-train-add-btn">+ Add Audio File</button>
+        <input type="file" accept="audio/*" multiple id="voice-train-file-input" class="voice-file-input">
+        <div class="voice-train-progress-row" id="voice-train-progress-row" hidden>
+          <div class="voice-train-progress-track"><div class="voice-train-progress-bar" id="voice-train-progress-bar"></div></div>
+          <p class="voice-train-status" id="voice-train-status"></p>
+        </div>
+        <div class="voice-train-epochs-row">
+          <span class="voice-train-name-label">Epochs</span>
+          <div class="voice-train-epochs-group" id="voice-train-epochs-group">
+            <button type="button" class="voice-epoch-btn" data-epochs="100">100 <span class="voice-epoch-hint">~25 min</span></button>
+            <button type="button" class="voice-epoch-btn voice-epoch-btn--active" data-epochs="200">200 <span class="voice-epoch-hint">~50 min</span></button>
+            <button type="button" class="voice-epoch-btn" data-epochs="300">300 <span class="voice-epoch-hint">~75 min</span></button>
+          </div>
+        </div>
+        <button type="button" class="btn btn-primary" id="voice-train-start-btn" disabled>Train My Voice Model</button>
+      </div><!-- /voice-tab-train -->
+
+      </div><!-- /voice-panel-recording -->
+
+      <!-- Waveform preview (shown after recording/upload, always visible when set) -->
+      <div class="voice-preview" id="voice-preview" hidden>
+        <p class="voice-preview__label">Your Recording</p>
+        <canvas class="voice-waveform-canvas" id="voice-waveform-canvas" width="400" height="60"></canvas>
+        <p class="voice-preview__duration" id="voice-preview-duration"></p>
+        <audio id="voice-preview-audio" controls style="width:100%;margin-top:6px"></audio>
+        <p class="voice-record-status" id="voice-record-status"></p>
+      </div>
+
+      <!-- Voice-ready / test panel — shown after upload OR when re-opening with saved voice -->
+      <div id="voice-test-panel" hidden>
+        <p class="voice-test-hint">Your voice clone is ready — type a sentence to hear how it sounds.</p>
+        <div class="voice-test-input-row">
+          <input id="voice-test-input" type="text" class="voice-test-input"
+                 placeholder="e.g. Hello, this is my cloned voice"
+                 maxlength="500">
+          <button type="button" id="voice-test-btn" class="btn btn-secondary">Test</button>
+        </div>
+        <div id="voice-test-status" class="voice-test-status"></div>
+        <audio id="voice-test-audio" controls hidden style="width:100%;margin-top:8px"></audio>
+        <button type="button" id="voice-newrecord-btn" class="voice-replace-link">&#8617; Record a different voice</button>
+      </div>
+
+      <!-- Actions -->
+      <div class="voice-dialog__actions">
+        <button type="button" class="btn btn-primary" id="voice-done-btn" hidden>Done</button>
+        <button type="button" class="btn btn-primary" id="voice-artist-confirm-btn" disabled>Use This Artist Voice</button>
+        <button type="button" class="btn btn-primary" id="voice-confirm-btn" disabled hidden>Use This Recording</button>
+        <button type="button" class="btn btn-secondary" id="voice-cancel-btn">Cancel</button>
+      </div>
+
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js?v=48"></script>
 </body>
 </html>

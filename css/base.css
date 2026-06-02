@@ -4,6 +4,8 @@
   box-sizing: border-box;
 }
 
+[hidden] { display: none !important; }
+
 html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;

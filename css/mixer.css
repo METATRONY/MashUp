@@ -1544,3 +1544,752 @@
   background: var(--bg-muted);
   flex-wrap: wrap;
 }
+
+/* ── Voice replace ───────────────────────────────────────────────────────────── */
+
+.voice-replace-btn--active {
+  border-color: var(--accent-teal) !important;
+  color: var(--accent-teal) !important;
+  background: var(--accent-teal-dim) !important;
+}
+
+.vocal-gain-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.vocal-gain-slider {
+  width: 80px;
+  accent-color: var(--accent-teal);
+  cursor: pointer;
+}
+
+.voice-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(24, 24, 27, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md);
+}
+
+.voice-overlay[hidden] { display: none; }
+
+.voice-dialog {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 600px;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.voice-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.voice-dialog__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.voice-dialog__close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.25rem;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+  transition: color var(--transition-fast);
+}
+
+.voice-dialog__close:hover { color: var(--text-primary); }
+
+.voice-dialog__hint {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* Tabs */
+.voice-tabs {
+  display: flex;
+  gap: var(--space-xs);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-sm);
+}
+
+.voice-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-full);
+  background: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.voice-tab--active {
+  border-color: var(--border-strong);
+  background: var(--bg-muted);
+  color: var(--text-primary);
+}
+
+/* Top-level tabs (Artist Voices / My Recording) */
+.voice-tabs-top {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 14px;
+}
+
+.voice-tab-top {
+  flex: 1;
+  padding: 8px 14px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.voice-tab-top:hover { color: var(--text-primary); }
+
+.voice-tab-top--active {
+  border-bottom-color: var(--accent-teal);
+  color: var(--text-primary);
+}
+
+/* Artist catalog grid */
+.artist-catalog {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+  padding: 4px 0 12px;
+}
+
+.artist-catalog[hidden] { display: none; }
+
+.artist-confirm-error {
+  color: var(--accent-amber, #d97706);
+  font-size: 0.82rem;
+  margin: 4px 0 0;
+}
+
+.artist-confirm-error[hidden] { display: none; }
+
+.artist-catalog-loading {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding: 8px 0;
+}
+
+.artist-card {
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  padding: 12px 10px;
+  cursor: pointer;
+  text-align: center;
+  background: var(--bg-card, var(--bg-muted));
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.artist-card:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover, var(--bg-muted));
+}
+
+.artist-card--selected {
+  border-color: var(--accent-teal);
+  background: rgba(13, 148, 136, 0.18);
+  box-shadow: 0 0 0 2px var(--accent-teal);
+}
+
+.artist-card__name {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.artist-card__genre {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin-top: 3px;
+}
+
+/* Panels */
+.voice-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.voice-panel[hidden] { display: none; }
+
+/* Record controls */
+.voice-record-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.voice-record-timer {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--accent-teal);
+}
+
+.voice-record-status {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin: 0;
+  min-height: 1.2em;
+}
+
+.voice-record-btn--recording {
+  background: #dc2626 !important;
+  border-color: #dc2626 !important;
+  color: #fff !important;
+  animation: voice-pulse-red 1.2s infinite;
+}
+
+@keyframes voice-pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+  50%       { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+}
+
+/* Upload area */
+.voice-upload-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-lg);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-muted);
+  cursor: pointer;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.voice-upload-area:hover,
+.voice-upload-area--drag {
+  border-color: var(--accent-teal);
+  background: var(--accent-teal-dim);
+}
+
+.voice-upload-formats {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.voice-file-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+
+/* Waveform preview */
+.voice-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.voice-preview[hidden] { display: none; }
+
+.voice-preview__label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.voice-waveform-canvas {
+  width: 100%;
+  height: 60px;
+  border-radius: var(--radius-md);
+  background: var(--bg-muted);
+  display: block;
+}
+
+.voice-preview__duration {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Existing voice indicator */
+.voice-existing {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--accent-teal-dim);
+  border: 1px solid rgba(13, 148, 136, 0.25);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  color: var(--accent-teal);
+  font-weight: 500;
+}
+
+.voice-existing[hidden] { display: none; }
+
+.voice-existing span { flex: 1; }
+
+/* Tab content visibility */
+.voice-tab-content[hidden] { display: none; }
+
+/* Actions */
+.voice-dialog__actions {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: flex-end;
+}
+
+/* ── Karaoke: Song Picker ───────────────────────────────────────────────────── */
+
+.voice-pick-controls {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.voice-pick-empty {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  padding: var(--space-md) 0;
+  text-align: center;
+}
+
+.voice-song-select {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 32px 8px 12px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-family: var(--font-family);
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2'%3E%3Cpolyline points='6,9 12,15 18,9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  transition: border-color var(--transition-fast);
+}
+
+.voice-song-select:focus {
+  outline: none;
+  border-color: var(--accent-teal);
+  box-shadow: 0 0 0 3px var(--accent-teal-dim);
+}
+
+/* ── Karaoke: Prep / Loading ────────────────────────────────────────────────── */
+
+.voice-prep-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-lg) 0;
+  text-align: center;
+}
+
+.voice-prep-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--bg-subtle);
+  border-top-color: var(--accent-teal);
+  border-radius: 50%;
+  animation: voice-spin 0.8s linear infinite;
+}
+
+@keyframes voice-spin {
+  to { transform: rotate(360deg); }
+}
+
+.voice-prep-label {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.voice-prep-subtext {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.voice-prep-back {
+  align-self: center;
+  margin-top: var(--space-xs);
+}
+
+/* ── Karaoke: Player ────────────────────────────────────────────────────────── */
+
+.voice-karaoke-player {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-sm);
+}
+
+.voice-karaoke-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.voice-karaoke-song-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.voice-karaoke-progress {
+  width: 100%;
+  accent-color: var(--accent-teal);
+  cursor: pointer;
+  height: 4px;
+}
+
+.voice-karaoke-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.voice-karaoke-timer {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #dc2626;
+  min-width: 3ch;
+}
+
+.voice-karaoke-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.voice-karaoke-status {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  min-height: 1.2em;
+}
+
+.voice-karaoke-back {
+  align-self: flex-start;
+  font-size: 0.8125rem;
+}
+
+/* ── Karaoke: Recording live indicator ──────────────────────────────────────── */
+
+.voice-record-live {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #dc2626;
+  animation: voice-pulse-red 1.2s infinite;
+  flex-shrink: 0;
+}
+
+.voice-record-live[hidden] { display: none; }
+
+/* ── Karaoke: Lyrics Panel ──────────────────────────────────────────────────── */
+
+.voice-lyrics-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-muted);
+  max-height: 180px;
+  overflow-y: auto;
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-xs);
+}
+
+.voice-lyrics-nolyrics {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-dim);
+  text-align: center;
+  padding: var(--space-sm) 0;
+}
+
+.voice-lyrics-text {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  word-break: break-word;
+  font-family: var(--font-family);
+}
+
+.voice-lyric-line {
+  display: block;
+  padding: 1px 6px;
+  border-left: 2px solid transparent;
+  transition: color 0.2s ease, border-color 0.2s ease, font-weight 0.2s ease;
+}
+
+.voice-lyric-line--active {
+  color: var(--accent-teal);
+  font-weight: 600;
+  border-left-color: var(--accent-teal);
+}
+
+/* ── Voice test panel ────────────────────────────────────────────────────────── */
+
+#voice-test-panel {
+  padding: 14px 0 4px;
+  border-top: 1px solid rgba(255,255,255,.08);
+  margin-top: 4px;
+}
+
+.voice-test-hint {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+}
+
+.voice-test-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.voice-test-input {
+  flex: 1;
+  background: var(--bg-elevated);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  color: var(--text-primary);
+  padding: 7px 12px;
+  font-size: 0.875rem;
+  font-family: var(--font-family);
+  transition: border-color var(--transition-fast);
+}
+
+.voice-test-input:focus {
+  outline: none;
+  border-color: var(--accent-teal);
+  box-shadow: 0 0 0 3px var(--accent-teal-dim);
+}
+
+.voice-test-status {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  min-height: 18px;
+  margin-top: 6px;
+}
+
+.voice-replace-link {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  margin-top: 12px;
+  padding: 0;
+  text-decoration: underline;
+  display: block;
+}
+
+.voice-replace-link:hover {
+  color: var(--text-primary);
+}
+
+/* ── My Voice artist card ───────────────────────────────────────────────────── */
+.artist-card--my-voice { border-color: rgba(13,148,136,0.5); position: relative; }
+.artist-card--my-voice .artist-card__name { color: var(--accent-teal); }
+
+/* Remove button on My Voice cards */
+.artist-card__remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  padding: 0;
+}
+.artist-card--my-voice:hover .artist-card__remove { opacity: 1; }
+.artist-card__remove:hover { color: var(--accent-red, #ef4444); }
+
+/* ── Train My Voice panel ───────────────────────────────────────────────────── */
+.voice-train-clips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+  margin-bottom: var(--space-sm);
+}
+.voice-train-clip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--bg-muted);
+  border-radius: var(--radius-sm);
+  font-size: .8125rem;
+  color: var(--text-secondary);
+}
+.voice-train-clip-row__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.voice-train-clip-row__dur { color: var(--text-muted); font-size: .75rem; }
+.voice-train-name-row,
+.voice-train-epochs-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+.voice-train-epochs-group {
+  display: flex;
+  gap: 4px;
+}
+.voice-epoch-btn {
+  background: var(--bg-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: .8125rem;
+  padding: 4px 10px;
+  line-height: 1.4;
+}
+.voice-epoch-btn:hover { border-color: var(--accent-teal); color: var(--text-primary); }
+.voice-epoch-btn--active {
+  background: var(--accent-teal);
+  border-color: var(--accent-teal);
+  color: #000;
+  font-weight: 600;
+}
+.voice-epoch-hint { font-size: .7rem; opacity: .75; }
+.voice-train-name-label {
+  font-size: .8125rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.voice-train-name-input {
+  flex: 1;
+  background: var(--bg-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: .875rem;
+  padding: 5px 10px;
+  outline: none;
+}
+.voice-train-name-input:focus { border-color: var(--accent-teal); }
+.voice-train-clip-count {
+  font-size: .8125rem;
+  color: var(--text-muted);
+  margin: 0 0 var(--space-sm);
+}
+.voice-train-progress-row { margin: var(--space-sm) 0; }
+.voice-train-progress-row[hidden] { display: none; }
+.voice-train-progress-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
+.voice-train-progress-bar {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent-teal);
+  width: 0%;
+  transition: width .6s ease;
+}
+.voice-train-status {
+  font-size: .75rem;
+  color: var(--text-muted);
+  margin: 4px 0 0;
+}
+
+/* ── Karaoke pitch-correct row ──────────────────────────────────────────────── */
+#voice-pitch-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: var(--space-sm) 0;
+}
+#voice-pitch-row[hidden] { display: none; }
+.voice-pitch-status {
+  font-size: .8125rem;
+  color: var(--text-muted);
+  min-height: 1.2em;
+  margin: 0;
+}

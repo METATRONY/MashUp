@@ -18,7 +18,10 @@ import uuid
 from pathlib import Path
 from threading import Lock
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
+import numpy as np
+import soundfile as sf
+
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -44,6 +47,8 @@ from .separate import run_demucs
 from .stem_cache import load as stem_cache_load, save as stem_cache_save
 from . import metadata_cache
 from .tempo_match import detect_bpm, detect_key_from_audio, time_stretch_stems, pitch_shift_stems, semitone_distance, beat_align_tracks
+from .voice_process import VOICES_DIR, save_voice_upload, prepare_voice_stem, load_voice_as_array, append_training_clip
+from .voice_convert import convert_voice_safe
 
 OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
 OUTPUT_DIR.mkdir(exist_ok=True)
@@ -61,6 +66,7 @@ app.add_middleware(
 )
 
 app.mount("/outputs", StaticFiles(directory=str(OUTPUT_DIR)), name="outputs")
+app.mount("/uploads/voices", StaticFiles(directory=str(VOICES_DIR)), name="voices")
 
 jobs: dict[str, dict] = {}
 jobs_lock = Lock()
@@ -115,6 +121,38 @@ class MashupRequest(BaseModel):
     dj_auto_timing: bool = False # DJ mode: auto-detect transition points
     dj_n_swaps: int = 4          # DJ mode: number of back-and-forth transitions
     tracks: list[TrackIn]
+
+
+class VoiceReplaceRequest(BaseModel):
+    video_id: str = Field(min_length=6)
+    voice_id: str | None = None      # user recording (upload-voice flow)
+    artist_id: str | None = None     # pre-trained artist model (catalog flow)
+    pitch_shift: int = 0             # semitone adjustment for key matching
+    sample: bool = False
+    hint_bpm: float | None = None
+    key: int | None = None
+    mode: int | None = None
+    vocal_gain: float = 2.0   # linear gain applied to converted vocals before mixing
+
+
+class KaraokePrepRequest(BaseModel):
+    video_id: str = Field(min_length=6)
+
+
+class TestVoiceRequest(BaseModel):
+    voice_id: str
+    text: str = Field(min_length=1, max_length=500)
+
+
+class TrainVoiceRequest(BaseModel):
+    voice_id: str
+    n_epochs: int = 100
+    name: str = "My Voice"
+
+
+class KaraokePitchCorrectRequest(BaseModel):
+    video_id: str
+    voice_id: str
 
 
 def validate_request(req: MashupRequest) -> None:
@@ -395,6 +433,492 @@ def run_pipeline(job_id: str, payload: dict) -> None:
         )
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+
+# ── Voice replace endpoints ────────────────────────────────────────────────────
+
+@app.get("/api/artists")
+async def get_artists() -> list[dict]:
+    """Return the curated RVC artist catalog."""
+    from .rvc_infer import load_catalog
+    return load_catalog()
+
+
+@app.post("/api/upload-voice")
+async def upload_voice(
+    file: UploadFile = File(...),
+    voice_id: str | None = Query(None, description="Existing voice_id to append a training clip to"),
+) -> dict:
+    """Accept a voice recording and convert to 44100 Hz mono WAV.
+
+    When voice_id is supplied the clip is appended to that session's clips/
+    directory (for training data accumulation) instead of creating a new voice.
+    """
+    MAX = 50 * 1024 * 1024
+    data = await file.read(MAX + 1)
+    if len(data) > MAX:
+        raise HTTPException(status_code=413, detail="File too large (max 50 MB)")
+
+    # ── Training-clip accumulation path ───────────────────────────────────────
+    if voice_id:
+        wav_path, clip_idx = append_training_clip(voice_id, data, file.filename or "clip")
+        audio, sr = sf.read(str(wav_path), dtype="float32", always_2d=False)
+        duration = len(audio) / max(sr, 1)
+        print(f"[upload-voice] training clip {clip_idx} for {voice_id}: {duration:.1f}s", flush=True)
+        return {"voice_id": voice_id, "duration": round(duration, 2), "clip_index": clip_idx}
+
+    # ── New voice session path (original flow) ────────────────────────────────
+    voice_id = str(uuid.uuid4())
+    voice_wav = save_voice_upload(voice_id, data, file.filename or "voice")
+
+    audio, sr = sf.read(str(voice_wav), dtype="float32", always_2d=False)
+    if audio.ndim == 2:
+        audio = audio.mean(axis=1)
+    duration = len(audio) / sr
+    rms = float(np.sqrt(np.mean(audio ** 2))) if audio.size else 0.0
+
+    if duration < 5.0:
+        shutil.rmtree(voice_wav.parent, ignore_errors=True)
+        raise HTTPException(
+            status_code=422,
+            detail=f"Recording too short ({duration:.1f}s) — sing for at least 30 seconds.",
+        )
+    if rms < 5e-3:
+        shutil.rmtree(voice_wav.parent, ignore_errors=True)
+        raise HTTPException(
+            status_code=422,
+            detail="Recording is too quiet or silent — check that your microphone is working.",
+        )
+
+    frame_len = int(sr * 0.025)
+    hop = frame_len // 2
+    energies = [
+        float(np.sqrt(np.mean(audio[i:i + frame_len] ** 2)))
+        for i in range(0, len(audio) - frame_len, hop)
+    ]
+    voiced_pct = sum(1 for e in energies if e > 5e-3) / max(len(energies), 1)
+    if voiced_pct < 0.15:
+        shutil.rmtree(voice_wav.parent, ignore_errors=True)
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Recording is {voiced_pct * 100:.0f}% voiced — mostly silence. "
+                "Move the microphone closer and try again."
+            ),
+        )
+
+    print(
+        f"[upload-voice] {voice_id}: {duration:.1f}s, RMS={rms:.4f}, voiced={voiced_pct * 100:.0f}%",
+        flush=True,
+    )
+    return {"voice_id": voice_id, "duration": round(duration, 2)}
+
+
+@app.post("/api/voice-replace")
+async def voice_replace_endpoint(req: VoiceReplaceRequest, bg: BackgroundTasks) -> dict:
+    """Start a voice-replacement job for a single song."""
+    job_id = str(uuid.uuid4())
+    set_job(job_id, {"status": "queued"})
+    bg.add_task(run_voice_replace_pipeline, job_id, req.model_dump())
+    return {"job_id": job_id}
+
+
+def run_voice_replace_pipeline(job_id: str, payload: dict) -> None:
+    req = VoiceReplaceRequest.model_validate(payload)
+    print(f"[{job_id}] Voice-replace pipeline video_id={req.video_id} sample={req.sample}", flush=True)
+    set_job(job_id, {"status": "running"})
+    work = Path(tempfile.mkdtemp(prefix=f"voice_{job_id}_"))
+    wav_for_key: Path | None = None
+    try:
+        demucs_model = "mdx_extra" if req.sample else "htdemucs"
+        video_id = req.video_id.strip()
+
+        # ── Step 1: Download + Demucs (use stem cache if available) ──────────
+        cached = stem_cache_load(video_id, demucs_model)
+        if cached is not None:
+            nine, detected_bpm, _ = cached
+            print(f"[{job_id}] Stem cache hit: {video_id}", flush=True)
+        else:
+            tdir = work / "dl"
+            wav = download_youtube_audio(video_id, tdir, max_duration=30 if req.sample else None)
+            wav_for_key = wav
+            detected_bpm = detect_bpm(wav)
+
+            if req.hint_bpm and 30.0 < req.hint_bpm < 300.0:
+                hint = req.hint_bpm
+                candidates = [
+                    detected_bpm * f
+                    for f in (0.25, 0.5, 1.0, 2.0, 4.0)
+                    if 30.0 < detected_bpm * f < 300.0
+                ]
+                best = min(candidates, key=lambda c: abs(c / hint - 1.0))
+                if abs(best - detected_bpm) > 0.5:
+                    detected_bpm = best
+
+            if req.sample:
+                trimmed = tdir / "song_trim.wav"
+                subprocess.run(
+                    ["ffmpeg", "-y", "-i", str(wav), "-t", "30",
+                     "-ac", "2", "-ar", "44100", str(trimmed)],
+                    check=True, timeout=120,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                wav = trimmed
+
+            sep_root = work / "sep"
+            stem_dir = run_demucs(wav, sep_root, model=demucs_model)
+            nine = build_nine_stems(stem_dir)
+            stem_cache_save(video_id, demucs_model, nine, detected_bpm, [])
+
+        # ── Step 2: Convert vocals stem ──────────────────────────────────────
+        ref_len    = max(a.size for a in nine.values() if a.size > 0)
+        song_vocals = nine.get("vocals")
+        vocal_gain  = getattr(req, "vocal_gain", 2.0)
+
+        if req.artist_id:
+            # ── RVC artist model path ──────────────────────────────────────────
+            from .rvc_infer import convert_with_rvc_safe, get_artist
+            try:
+                artist_info = get_artist(req.artist_id)
+                artist_name = artist_info.get("name", req.artist_id)
+            except Exception:
+                artist_name = req.artist_id
+            print(f"[{job_id}] ▶ RVC voice conversion — artist: {artist_name} (id={req.artist_id}) pitch_shift={req.pitch_shift:+d}st", flush=True)
+            original_rms = float(np.sqrt(np.mean(song_vocals ** 2))) if song_vocals is not None and song_vocals.size > 0 else 0.0
+            converted = convert_with_rvc_safe(
+                song_vocals=song_vocals,
+                artist_id=req.artist_id,
+                sr=44100,
+                pitch_shift=req.pitch_shift,
+            )
+            converted_rms = float(np.sqrt(np.mean(converted ** 2))) if converted.size > 0 else 0.0
+            rvc_worked = abs(converted_rms - original_rms) > 0.005
+            print(
+                f"[{job_id}] ✔ RVC done — artist: {artist_name}  "
+                f"original_rms={original_rms:.4f}  converted_rms={converted_rms:.4f}  "
+                f"{'voice CHANGED ✓' if rvc_worked else 'WARNING: voice unchanged — model may have failed'}",
+                flush=True,
+            )
+            # Normalize RVC output to match original vocal level
+            if original_rms > 0 and converted_rms > 0:
+                converted = (converted * (original_rms / converted_rms)).astype(np.float32)
+            # Trim/pad to ref_len
+            if converted.size >= ref_len:
+                nine["vocals"] = converted[:ref_len].copy()
+            else:
+                nine["vocals"] = np.pad(converted, (0, ref_len - converted.size)).astype(np.float32)
+        else:
+            # ── User recording path (STFT spectral morphing) ──────────────────
+            print(f"[{job_id}] ▶ STFT spectral morphing — voice_id={req.voice_id}", flush=True)
+            voice_work = work / "voice"
+            voice_work.mkdir(exist_ok=True)
+            nine["vocals"] = prepare_voice_stem(
+                voice_id=req.voice_id,
+                work_dir=voice_work,
+                target_samples=ref_len,
+                semitones=0.0,
+                song_vocals=song_vocals,
+            )
+
+        if nine["vocals"] is not None and nine["vocals"].size > 0:
+            nine["vocals"] = (nine["vocals"] * vocal_gain).astype(np.float32)
+        print(f"[{job_id}] Injected voice (len={ref_len} samples, gain={vocal_gain:.1f}x)", flush=True)
+
+        # ── Step 3: Mix all 9 components from the single track ────────────────
+        track_inputs = [{
+            "track_id": "voice_track",
+            "components": list(nine.keys()),
+            "stems": nine,
+            "volume": 1.0,
+            "muted": False,
+        }]
+        mix, sr = assemble_mix(track_inputs)
+
+        if req.sample:
+            mix = mix[:sr * 30]
+
+        wav_path = work / "mix.wav"
+        write_wav(wav_path, mix, sr)
+        mp3_path = OUTPUT_DIR / f"{job_id}.mp3"
+        wav_to_mp3(wav_path, mp3_path)
+
+        set_job(job_id, {
+            "status": "done",
+            "download_url": f"/outputs/{job_id}.mp3",
+            "stem_files": {},
+            "stem_meta": {},
+            "track_analysis": [],
+            "error": None,
+        })
+    except Exception as e:
+        print(f"[{job_id}] Voice-replace error: {e}", flush=True)
+        set_job(job_id, {"status": "error", "error": str(e), "download_url": None})
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+# ── Karaoke prep ──────────────────────────────────────────────────────────────
+
+def _detect_vocals_onset(vocal_arr: np.ndarray, sr: int = 44100,
+                          window_secs: float = 0.5, threshold: float = 0.01) -> float:
+    """Return seconds into the track when vocals are first sustained above threshold."""
+    window = int(window_secs * sr)
+    hop = window // 2
+    prev_above = False
+    for i in range(0, max(0, len(vocal_arr) - window), hop):
+        rms = float(np.sqrt(np.mean(vocal_arr[i:i + window] ** 2)))
+        above = rms > threshold
+        if above and prev_above:
+            onset = max(0.0, (i - hop) / sr)
+            return round(onset, 2)
+        prev_above = above
+    return 0.0
+
+
+@app.post("/api/karaoke-prep")
+async def karaoke_prep(req: KaraokePrepRequest, bg: BackgroundTasks) -> dict:
+    """Prepare a vocals-free instrumental for karaoke recording. Cached between calls."""
+    inst_mp3 = OUTPUT_DIR / "karaoke" / req.video_id / "instrumental.mp3"
+    meta_file = OUTPUT_DIR / "karaoke" / req.video_id / "meta.json"
+    if inst_mp3.exists():
+        vocals_start_secs = 0.0
+        if meta_file.exists():
+            try:
+                vocals_start_secs = json.loads(meta_file.read_text(encoding="utf-8")).get("vocals_start_secs", 0.0)
+            except Exception:
+                pass
+        return {
+            "status": "done",
+            "download_url": f"/outputs/karaoke/{req.video_id}/instrumental.mp3",
+            "vocals_start_secs": vocals_start_secs,
+        }
+    job_id = str(uuid.uuid4())
+    set_job(job_id, {"status": "queued"})
+    bg.add_task(run_karaoke_prep, job_id, req.video_id)
+    return {"job_id": job_id, "status": "queued"}
+
+
+def run_karaoke_prep(job_id: str, video_id: str) -> None:
+    set_job(job_id, {"status": "running"})
+    work = Path(tempfile.mkdtemp(prefix=f"karaoke_{job_id}_"))
+    try:
+        model = "htdemucs"
+        cached = stem_cache_load(video_id, model)
+        if cached:
+            nine, _, _ = cached
+            print(f"[{job_id}] Karaoke: stem cache hit for {video_id}", flush=True)
+        else:
+            print(f"[{job_id}] Karaoke: running Demucs for {video_id}", flush=True)
+            tdir = work / "dl"
+            wav = download_youtube_audio(video_id, tdir)
+            sep_root = work / "sep"
+            stem_dir = run_demucs(wav, sep_root, model=model)
+            nine = build_nine_stems(stem_dir)
+            stem_cache_save(video_id, model, nine, 0.0, [])
+
+        vocal_keys = {k for k in nine if "vocal" in k.lower()}
+        inst_arrays = [v for k, v in nine.items() if k not in vocal_keys and v.size > 0]
+        if not inst_arrays:
+            raise RuntimeError("No non-vocal stems found")
+
+        # Detect when vocals actually begin (skip instrumental intros)
+        vocals_start_secs = 0.0
+        for vk in vocal_keys:
+            arr = nine.get(vk)
+            if arr is not None and arr.size > 0:
+                vocals_start_secs = _detect_vocals_onset(arr)
+                break
+        print(f"[{job_id}] Karaoke vocals onset: {vocals_start_secs:.1f}s", flush=True)
+
+        max_len = max(a.size for a in inst_arrays)
+        instrumental = np.zeros(max_len, dtype=np.float32)
+        for arr in inst_arrays:
+            instrumental[:arr.size] += arr
+
+        peak = float(np.abs(instrumental).max())
+        if peak > 0:
+            instrumental *= 0.9 / peak
+
+        karaoke_dir = OUTPUT_DIR / "karaoke" / video_id
+        karaoke_dir.mkdir(parents=True, exist_ok=True)
+        tmp_wav = work / "instrumental.wav"
+        write_wav(tmp_wav, instrumental, 44100)
+        wav_to_mp3(tmp_wav, karaoke_dir / "instrumental.mp3")
+
+        # Persist onset so the fast-path cache hit can return it
+        meta_file = karaoke_dir / "meta.json"
+        meta_file.write_text(json.dumps({"vocals_start_secs": vocals_start_secs}), encoding="utf-8")
+
+        print(f"[{job_id}] Karaoke instrumental ready for {video_id}", flush=True)
+        set_job(job_id, {
+            "status": "done",
+            "download_url": f"/outputs/karaoke/{video_id}/instrumental.mp3",
+            "vocals_start_secs": vocals_start_secs,
+        })
+    except Exception as e:
+        print(f"[{job_id}] Karaoke-prep error: {e}", flush=True)
+        set_job(job_id, {"status": "error", "error": str(e)})
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+# ── Voice clone test ──────────────────────────────────────────────────────────
+
+def _generate_tts_wav(text: str, work_dir: Path) -> Path:
+    """macOS say → AIFF → ffmpeg → mono 44100 Hz WAV."""
+    import platform
+    if platform.system() != "Darwin":
+        raise RuntimeError("TTS voice test requires macOS")
+    aiff = work_dir / "tts.aiff"
+    wav  = work_dir / "tts.wav"
+    subprocess.run(["say", "-o", str(aiff), text], check=True, timeout=30)
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", str(aiff),
+         "-ac", "1", "-ar", "44100", "-acodec", "pcm_f32le", str(wav)],
+        check=True, timeout=30,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    return wav
+
+
+@app.post("/api/test-voice")
+async def test_voice_endpoint(req: TestVoiceRequest) -> dict:
+    """Generate TTS audio converted to the user's cloned voice for playback testing.
+
+    If a trained RVC model exists for this voice_id, uses RVC inference for
+    higher quality output. Otherwise falls back to STFT spectral morphing.
+    """
+    import os
+    user_model_id  = f"user_{req.voice_id}"
+    rvc_model_path = Path(__file__).resolve().parent / "models" / "rvc" / user_model_id / "model.pth"
+    voice_wav      = VOICES_DIR / req.voice_id / "voice.wav"
+
+    has_rvc   = rvc_model_path.exists() and os.getenv("MASHUP_USE_MODAL")
+    has_voice = voice_wav.exists()
+    if not has_rvc and not has_voice:
+        raise HTTPException(status_code=404, detail="Voice not found")
+
+    work = Path(tempfile.mkdtemp(prefix="tts_test_"))
+    try:
+        tts_wav   = _generate_tts_wav(req.text, work)
+        tts_audio = load_voice_as_array(tts_wav)
+
+        if has_rvc:
+            from .rvc_infer import convert_with_rvc_safe
+            print(f"[test-voice] using trained RVC model for {req.voice_id}", flush=True)
+            converted = convert_with_rvc_safe(tts_audio, user_model_id, sr=44100)
+        else:
+            user_audio = load_voice_as_array(voice_wav)
+            converted  = convert_voice_safe(
+                song_vocals=tts_audio,
+                user_voice=user_audio,
+                song_sr=44100,
+                user_sr=44100,
+            )
+
+        out_dir = OUTPUT_DIR / "test-voice"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        tmp_wav = work / "result.wav"
+        out_mp3 = out_dir / f"{req.voice_id}_{uuid.uuid4().hex[:8]}.mp3"
+        write_wav(tmp_wav, converted, 44100)
+        wav_to_mp3(tmp_wav, out_mp3)
+        return {"audio_url": f"/outputs/test-voice/{out_mp3.name}"}
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+# ── Custom voice training endpoints ───────────────────────────────────────────
+
+@app.get("/api/my-voice/{voice_id}/status")
+async def my_voice_status(voice_id: str) -> dict:
+    """Check whether a trained RVC model exists locally for this voice_id."""
+    model_path = Path(__file__).resolve().parent / "models" / "rvc" / f"user_{voice_id}" / "model.pth"
+    return {"trained": model_path.exists(), "voice_id": voice_id}
+
+
+@app.get("/api/my-voices")
+async def list_my_voices() -> dict:
+    """Scan disk for all trained user voice models and return their ids + names."""
+    rvc_dir = Path(__file__).resolve().parent / "models" / "rvc"
+    voices = []
+    for d in sorted(rvc_dir.iterdir()):
+        if not d.is_dir() or not d.name.startswith("user_"):
+            continue
+        if not (d / "model.pth").exists():
+            continue
+        voice_id = d.name[len("user_"):]
+        name_file = d / "name.txt"
+        name = name_file.read_text().strip() if name_file.exists() else "My Voice"
+        voices.append({"id": voice_id, "name": name})
+    return {"voices": voices}
+
+
+@app.delete("/api/my-voice/{voice_id}")
+async def delete_my_voice(voice_id: str) -> dict:
+    """Delete a trained user voice model from disk."""
+    rvc_dir = Path(__file__).resolve().parent / "models" / "rvc" / f"user_{voice_id}"
+    if rvc_dir.exists():
+        shutil.rmtree(str(rvc_dir))
+    return {"deleted": True}
+
+
+@app.post("/api/train-voice")
+async def train_voice(req: TrainVoiceRequest, bg: BackgroundTasks) -> dict:
+    """Start async RVC model training for a user's accumulated voice clips."""
+    clips_dir = VOICES_DIR / req.voice_id / "clips"
+    if not clips_dir.exists() or not list(clips_dir.glob("clip_*.wav")):
+        raise HTTPException(status_code=422, detail="No training clips found for this voice_id")
+    job_id = str(uuid.uuid4())
+    set_job(job_id, {"status": "queued", "type": "training", "voice_id": req.voice_id})
+    bg.add_task(_run_voice_training, job_id, req.voice_id, req.n_epochs, req.name)
+    return {"job_id": job_id}
+
+
+def _run_voice_training(job_id: str, voice_id: str, n_epochs: int, name: str = "My Voice") -> None:
+    from .rvc_train import launch_rvc_training
+    launch_rvc_training(voice_id, job_id, n_epochs, name)
+
+
+@app.post("/api/karaoke-pitch-correct")
+async def karaoke_pitch_correct(req: KaraokePitchCorrectRequest, bg: BackgroundTasks) -> dict:
+    """Pitch-correct a karaoke recording against the song's reference vocal stem."""
+    voice_wav = VOICES_DIR / req.voice_id / "voice.wav"
+    if not voice_wav.exists():
+        raise HTTPException(status_code=404, detail="Voice recording not found")
+    job_id = str(uuid.uuid4())
+    set_job(job_id, {"status": "queued", "type": "pitch_correct"})
+    bg.add_task(_run_pitch_correct, job_id, req.video_id, req.voice_id)
+    return {"job_id": job_id}
+
+
+def _run_pitch_correct(job_id: str, video_id: str, voice_id: str) -> None:
+    try:
+        set_job(job_id, {"status": "running"})
+        from .pitch_correct import correct_karaoke_pitch
+        import soundfile as sf_local
+
+        voice_wav = VOICES_DIR / voice_id / "voice.wav"
+        user_audio, _ = sf_local.read(str(voice_wav), dtype="float32", always_2d=False)
+        if user_audio.ndim == 2:
+            user_audio = user_audio.mean(axis=1)
+
+        corrected = correct_karaoke_pitch(video_id, user_audio)
+
+        out_dir = OUTPUT_DIR / "pitch_correct"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        work = Path(tempfile.mkdtemp(prefix="pitchfix_"))
+        try:
+            tmp_wav = work / "corrected.wav"
+            out_mp3 = out_dir / f"{job_id}.mp3"
+            write_wav(tmp_wav, corrected, 44100)
+            wav_to_mp3(tmp_wav, out_mp3)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+
+        set_job(job_id, {"status": "done", "download_url": f"/outputs/pitch_correct/{job_id}.mp3"})
+    except Exception as exc:
+        print(f"[pitch-correct] {job_id} failed: {exc}", flush=True)
+        set_job(job_id, {"status": "error", "error": str(exc)})
 
 
 @app.get("/api/library")

@@ -8226,5 +8226,23 @@
     "key_name": "G major",
     "album_art": "https://i.scdn.co/image/ab67616d0000b273ec548c00d3ac2f10be73366d",
     "spotify_id": "70LcF31zb1H0PyJoS1Sx1r"
+  },
+  {
+    "video_id": "0-EF60neguk",
+    "artist": "Sinéad O'Connor",
+    "title": "Nothing Compares 2 U",
+    "bpm": 120.1,
+    "key_name": "F major",
+    "album_art": "https://i.scdn.co/image/ab67616d0000b273919c02d20d8634f96ccd75ae",
+    "spotify_id": "5GHY1DFWKz3Prg2V0Iodqo"
+  },
+  {
+    "video_id": "MYSVMgRr6pw",
+    "artist": "Hozier",
+    "title": "Take Me To Church",
+    "bpm": 129.0,
+    "key_name": "E minor",
+    "album_art": "https://i.scdn.co/image/ab67616d0000b2737a9bf5f82e32d33d4503fe7b",
+    "spotify_id": "3dYD57lRAUcMHufyqn9GcI"
   }
 ]

@@ -400,6 +400,27 @@ export function renderGenerationUI(mashup, store) {
     promptBtnEl.disabled = !hasComponents;
   }
 
+  // Voice replace buttons
+  const voiceReplaceBtn = document.getElementById('voice-replace-btn');
+  const generateVoiceBtn = document.getElementById('generate-voice-btn');
+  const hasVoice = !!mashup.voiceId;
+  const hasSingleTrack = tracks.length >= 1;
+  if (voiceReplaceBtn) {
+    voiceReplaceBtn.disabled = busy;
+    voiceReplaceBtn.classList.toggle('voice-replace-btn--active', hasVoice);
+    voiceReplaceBtn.title = hasVoice
+      ? 'Voice recording ready — click to change or remove'
+      : 'Record or upload your voice to replace the vocals';
+  }
+  if (generateVoiceBtn) {
+    const canVoiceGen = hasVoice && hasSingleTrack;
+    generateVoiceBtn.style.display = hasVoice ? 'inline-flex' : 'none';
+    generateVoiceBtn.disabled = busy || !canVoiceGen;
+    generateVoiceBtn.textContent = busy && gen.isSample === false && gen.status === 'running' ? 'Working…' : 'Generate with My Voice';
+  }
+  const vocalGainLabel = document.getElementById('vocal-gain-label');
+  if (vocalGainLabel) vocalGainLabel.style.display = hasVoice ? 'inline-flex' : 'none';
+
   if (dl) {
     if (gen.status === 'done' && gen.resultUrl) {
       dl.dataset.resultUrl = gen.resultUrl;
@@ -552,6 +573,28 @@ export function initMixer(store) {
 
   genBtn?.addEventListener('click', () => startMashupGeneration(store));
   sampleBtn?.addEventListener('click', () => startMashupGeneration(store, { sample: true }));
+
+  document.getElementById('karaoke-btn')?.addEventListener('click', async () => {
+    const { openKaraokeModal } = await import('./voice.js');
+    openKaraokeModal();
+  });
+
+  document.getElementById('voice-replace-btn')?.addEventListener('click', async () => {
+    const { openVoiceModal } = await import('./voice.js');
+    openVoiceModal();
+  });
+
+  document.getElementById('generate-voice-btn')?.addEventListener('click', () => {
+    const gain = parseFloat(document.getElementById('vocal-gain-slider')?.value ?? '2');
+    import('./api.js').then(({ startVoiceReplace }) => startVoiceReplace(store, { vocalGain: gain }));
+  });
+
+  // Vocal gain slider — live readout
+  document.getElementById('vocal-gain-slider')?.addEventListener('input', (e) => {
+    const v = parseFloat(e.target.value).toFixed(1);
+    const label = document.getElementById('vocal-gain-value');
+    if (label) label.textContent = v;
+  });
 
   // DJ Mode toggle
   const djBtn = document.getElementById('dj-mode-btn');
