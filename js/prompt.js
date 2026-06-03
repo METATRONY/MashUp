@@ -261,6 +261,31 @@ export function generateMusicPrompt(state) {
     }
   }
 
+  // Override prog1 with actual detected chords when available
+  if (harmonic) {
+    const trackAnalysis = state.mashup.generation?.trackAnalysis ?? [];
+    // Prefer the vocal track's analysis, fall back to first available
+    const vocalTrack = tracks.find(t => (t.claimedComponents || []).includes('vocals'));
+    const leadAnalysis = trackAnalysis.find(a => a.track_id === (vocalTrack?.id ?? ''))
+      || trackAnalysis[0];
+    const rawChords = leadAnalysis?.chords;
+    if (rawChords?.length) {
+      // Count chord occurrences (exclude "N" — no chord)
+      const counts = {};
+      for (const { chord } of rawChords) {
+        if (chord !== 'N') counts[chord] = (counts[chord] || 0) + 1;
+      }
+      // Take up to 6 most frequent, format nicely ("Cmaj" → "C", "Amin" → "Am")
+      const top = Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([c]) => c.endsWith('min') ? c.slice(0, -3) + 'm' : c.endsWith('maj') ? c.slice(0, -3) : c);
+      if (top.length >= 2) {
+        harmonic = { ...harmonic, prog1: [top.join(' – '), 'detected from audio'] };
+      }
+    }
+  }
+
   const avgE = avg(allSongs.map(s => s.energy));
   const avgV = avg(allSongs.map(s => s.valence));
   const avgD = avg(allSongs.map(s => s.danceability));

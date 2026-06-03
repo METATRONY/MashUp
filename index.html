@@ -130,6 +130,9 @@
             <input type="search" id="song-search" class="library-search" placeholder="Search songs…" autocomplete="off">
           </div>
           <span class="library-count" id="library-count"></span>
+          <button type="button" class="btn btn-ghost library-sort-btn" id="sort-camelot-btn" title="Sort by Camelot key (harmonic wheel order)">
+            Sort: BPM
+          </button>
         </div>
         <form class="song-input-form" id="song-input-form">
           <div class="input-group">
@@ -178,6 +181,9 @@
           <svg width="14" height="14"><use href="#icon-search"/></svg>
           Find a Good Match
         </button>
+        <button type="button" class="btn btn-sm" id="auto-assign-btn" disabled title="Auto-assign each component to the best-matched track based on energy, danceability, and vibe">
+          Auto-assign
+        </button>
         <button type="button" class="btn btn-sm dj-mode-btn" id="dj-mode-btn" disabled title="DJ mode: play tracks sequentially with crossfades instead of mixing them in parallel">
           DJ Mode
         </button>
@@ -203,6 +209,9 @@
               <svg width="16" height="16"><use href="#icon-metronome"/></svg>
               <label for="bpm-input">BPM</label>
               <input type="number" id="bpm-input" class="bpm-input" value="120" min="40" max="300" step="1">
+              <button type="button" class="btn btn-ghost bpm-fix-btn" id="bpm-half-btn" title="Halve BPM">÷2</button>
+              <button type="button" class="btn btn-ghost bpm-fix-btn" id="bpm-double-btn" title="Double BPM">×2</button>
+              <button type="button" class="btn btn-ghost bpm-fix-btn" id="bpm-tap-btn" title="Tap to set BPM">TAP</button>
             </div>
             <div class="time-display" id="time-display">0:00.0</div>
           </div>

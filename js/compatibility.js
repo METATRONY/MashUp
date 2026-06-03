@@ -173,6 +173,24 @@ export function worstBpmStretch(songs, targetBpm) {
 }
 
 /**
+ * Compute the intersection of ±15% BPM safe ranges across all songs.
+ * Returns {min, max} rounded to integers, or null if no intersection exists
+ * or fewer than 2 songs have BPM data.
+ */
+export function safeBpmRange(songs) {
+  const bpms = songs.map((s) => s.bpm).filter((b) => b && b > 0);
+  if (bpms.length < 2) return null;
+  let lo = bpms[0] * 0.85;
+  let hi = bpms[0] * 1.15;
+  for (let i = 1; i < bpms.length; i++) {
+    lo = Math.max(lo, bpms[i] * 0.85);
+    hi = Math.min(hi, bpms[i] * 1.15);
+  }
+  if (lo >= hi) return null;
+  return { min: Math.round(lo), max: Math.round(hi) };
+}
+
+/**
  * Raw component scores for a song — lower level than suggestComponents.
  * Used for relative comparisons across tracks.
  *

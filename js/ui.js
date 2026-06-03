@@ -166,6 +166,13 @@ export function setupSongInput(store) {
 const COMP_LABEL = { drums: 'Drums', bass: 'Bass', vocals: 'Vocals', melody: 'Melody', harmony: 'Harmony', pads: 'Pads', percussion: 'Percussion', fx: 'FX', other: 'Other' };
 
 function sortedSongs(songs) {
+  if (_sortMode === 'camelot') {
+    return [...songs].sort((a, b) => {
+      const diff = _camelotSortKey(a) - _camelotSortKey(b);
+      if (diff !== 0) return diff;
+      return (a.bpm || 0) - (b.bpm || 0);
+    });
+  }
   return [...songs].sort((a, b) => {
     const bpmDiff = (a.bpm || 0) - (b.bpm || 0);
     if (bpmDiff !== 0) return bpmDiff;
@@ -288,6 +295,39 @@ function buildSongCard(song, store) {
 
   card.querySelector('.add-to-mixer-btn')?.addEventListener('click', () => addSongToMixer(store, song.id));
 
+  // BPM ÷2 / ×2 correction buttons — fix common librosa octave-detection errors
+  if (song.bpm) {
+    const badgesEl = card.querySelector('.song-card__badges');
+    if (badgesEl) {
+      const halfBtn = document.createElement('button');
+      halfBtn.type = 'button';
+      halfBtn.className = 'btn btn-ghost song-card__bpm-fix-btn';
+      halfBtn.title = 'Halve BPM (fix double-tempo detection)';
+      halfBtn.textContent = '÷2';
+      halfBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const next = Math.round(Math.max(40, Math.min(300, song.bpm / 2)));
+        store.updateSong(song.id, { bpm: next });
+        showToast(`BPM corrected to ${next}`, 'info');
+      });
+
+      const dblBtn = document.createElement('button');
+      dblBtn.type = 'button';
+      dblBtn.className = 'btn btn-ghost song-card__bpm-fix-btn';
+      dblBtn.title = 'Double BPM (fix half-tempo detection)';
+      dblBtn.textContent = '×2';
+      dblBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const next = Math.round(Math.max(40, Math.min(300, song.bpm * 2)));
+        store.updateSong(song.id, { bpm: next });
+        showToast(`BPM corrected to ${next}`, 'info');
+      });
+
+      badgesEl.appendChild(halfBtn);
+      badgesEl.appendChild(dblBtn);
+    }
+  }
+
   card.querySelector('.remove-song-btn')?.addEventListener('click', async () => {
     let ok = true;
     if (typeof window.showConfirm === 'function') {
@@ -301,6 +341,16 @@ function buildSongCard(song, store) {
 
 let _songSearchQuery = '';
 let _matchFilterIds = null; // Set<string> | null — null means no filter active
+let _sortMode = 'bpm';     // 'bpm' | 'camelot'
+
+// Parse Camelot string ("4A", "12B") into a numeric sort key
+function _camelotSortKey(song) {
+  const c = toCamelot(song.key ?? null, song.mode ?? null);
+  if (!c) return 9999;
+  const num = parseInt(c, 10);
+  const minor = c.endsWith('A') ? 0 : 1; // A (minor) sorts before B (major)
+  return num * 2 + minor;
+}
 
 export function setMatchFilter(ids, label = 'Showing compatible songs') {
   _matchFilterIds = ids instanceof Set ? ids : new Set(ids);
@@ -331,6 +381,14 @@ export function initSongSearch() {
   });
 
   document.getElementById('match-filter-clear')?.addEventListener('click', clearMatchFilter);
+
+  const sortBtn = document.getElementById('sort-camelot-btn');
+  sortBtn?.addEventListener('click', () => {
+    _sortMode = _sortMode === 'bpm' ? 'camelot' : 'bpm';
+    sortBtn.textContent = _sortMode === 'camelot' ? 'Sort: Key' : 'Sort: BPM';
+    sortBtn.classList.toggle('library-sort-btn--active', _sortMode === 'camelot');
+    document.dispatchEvent(new CustomEvent('mashup:search', { bubbles: true }));
+  });
 }
 
 export function renderSongs(songs, store) {

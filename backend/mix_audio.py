@@ -9,9 +9,26 @@ import numpy as np
 import soundfile as sf
 
 from .constants import COMPONENT_IDS, VALID_COMPONENTS
+from .mapping import _highpass
 from .tempo_match import find_best_entry_point, find_best_transition
 
-_TARGET_RMS = 0.08       # per-track RMS target before summing
+_TARGET_RMS = 0.08       # per-track RMS target (default / fallback)
+# Components whose low-end should be kept intact; all others get high-passed
+_KEEP_LOW_END = {"bass", "drums"}
+
+# Per-component loudness targets — louder for rhythmic anchors, quieter for
+# atmospheric layers so pads don't overpower the mix.
+_COMPONENT_RMS = {
+    "drums":      0.10,
+    "bass":       0.10,
+    "vocals":     0.09,
+    "melody":     0.08,
+    "percussion": 0.08,
+    "harmony":    0.07,
+    "other":      0.07,
+    "pads":       0.06,
+    "fx":         0.05,
+}
 _FADE_IN_SEC = 0.5       # seconds of linear fade-in on final mix
 _FADE_OUT_SEC = 1.0      # seconds of linear fade-out on final mix
 _SR = 44100
@@ -76,7 +93,8 @@ def assemble_mix(
         return np.zeros(_SR, dtype=np.float32), sr
 
     # Per-track RMS normalisation: compute a scale factor per track using
-    # all its active stems combined, then apply it consistently.
+    # all its active stems combined. Target RMS is the average of the per-component
+    # targets so quieter components (pads, fx) don't get boosted to drum level.
     track_scales: dict[int, float] = {}
     for t in track_inputs:
         if t.get("muted"):
@@ -95,7 +113,8 @@ def assemble_mix(
                 y = y[:max_len]
             combined += y
         current_rms = _rms(combined)
-        track_scales[tid] = _TARGET_RMS / current_rms
+        target_rms = sum(_COMPONENT_RMS.get(c, _TARGET_RMS) for c in active_components) / len(active_components)
+        track_scales[tid] = target_rms / current_rms
 
     mix = np.zeros(max_len, dtype=np.float64)
     for c in COMPONENT_IDS:
@@ -109,6 +128,9 @@ def assemble_mix(
             y = np.pad(y, (0, max_len - len(y)))
         else:
             y = y[:max_len]
+        # High-pass at 100 Hz to remove low-frequency mud from non-bass components
+        if c not in _KEEP_LOW_END:
+            y = _highpass(y.astype(np.float32), sr, 100.0).astype(np.float64)
         mix += y * scale * vol
 
     mix = _apply_fades(mix, sr)

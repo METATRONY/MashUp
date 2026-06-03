@@ -517,6 +517,18 @@
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
+.bpm-fix-btn {
+  padding: 3px 7px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.bpm-fix-btn:hover { color: var(--accent-teal); border-color: var(--accent-teal); }
+
 .time-display {
   font-variant-numeric: tabular-nums;
   font-size: 1.05rem;
@@ -1544,6 +1556,56 @@
   background: var(--bg-muted);
   flex-wrap: wrap;
 }
+
+/* Chord markers overlaid on the lane */
+.stem-editor__chord-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  pointer-events: none;
+  z-index: 2;
+}
+.stem-editor__chord-marker.chord--major { background: rgba(45, 212, 191, 0.45); }
+.stem-editor__chord-marker.chord--minor { background: rgba(251, 191, 36, 0.45); }
+.stem-editor__chord-marker.chord--none  { background: rgba(160, 160, 160, 0.25); }
+
+.stem-editor__chord-label {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  font-size: 0.58rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  pointer-events: none;
+  letter-spacing: 0.01em;
+}
+
+/* Pitch nudge buttons in stem editor row label */
+.stem-editor__pitch-btn {
+  padding: 1px 5px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  line-height: 1.4;
+  margin-left: 2px;
+}
+.stem-editor__pitch-btn:hover { color: var(--accent-violet); border-color: var(--accent-violet); }
+
+/* MIDI download link in row label */
+.stem-editor__midi-link {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 0.65rem;
+  color: var(--accent-teal);
+  text-decoration: none;
+  opacity: 0.8;
+}
+.stem-editor__midi-link:hover { opacity: 1; text-decoration: underline; }
 
 /* ── Voice replace ───────────────────────────────────────────────────────────── */
 

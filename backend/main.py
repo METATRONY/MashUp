@@ -287,7 +287,7 @@ def run_pipeline(job_id: str, payload: dict) -> None:
                 "effective_key": effective_key,
                 "effective_mode": effective_mode,
                 "chords": chords,
-                "midi_path": str(midi_path) if midi_path else None,
+                "midi_path": f"/outputs/{job_id}/{t.track_id}/{midi_path.name}" if midi_path else None,
             })
 
         # ── Determine master key anchor from all tracks ───────────────────────
@@ -1074,6 +1074,7 @@ class StemEditIn(BaseModel):
     start_trim: float = 0.0   # seconds to cut from start of stem audio
     end_trim: float = 0.0     # seconds to cut from end of stem audio
     volume: float = 1.0       # per-stem multiplier (0.0–1.5)
+    pitch_shift: int = 0      # additional semitones (±6 instruments, ±2 vocals)
 
 
 class RemixRequest(BaseModel):
@@ -1146,6 +1147,10 @@ def remix_mashup(job_id: str, req: RemixRequest):
                 track_stems[sname] = audio.astype(np.float32)
 
             if track_stems:
+                # Apply additional pitch shift requested via stem editor
+                if track_edit.pitch_shift != 0:
+                    track_stems = pitch_shift_stems(track_stems, float(track_edit.pitch_shift))
+
                 # Only list components whose WAVs were actually loaded — guards
                 # against KeyError in assemble_mix when files are missing on disk.
                 claimed_components = [

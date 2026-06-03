@@ -101,7 +101,7 @@ async function pollJob(jobId, store) {
 export function getTrackEdit(gen, trackId) {
   const e = gen.stemEdits?.[trackId];
   if (e && typeof e.offset === 'number') return e;
-  return { offset: 0, start_trim: 0, end_trim: 0, volume: 1.0 };
+  return { offset: 0, start_trim: 0, end_trim: 0, volume: 1.0, pitch_shift: 0 };
 }
 
 export async function remixMashup(store) {

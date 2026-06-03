@@ -13,6 +13,14 @@ function toCamelot(key, mode) {
   return mode === 1 ? maj[key] : min[key];
 }
 
+// "Cmaj" → "C", "Cmin" → "Cm", "C#maj" → "C#", "N" → "N"
+function formatChord(name) {
+  if (!name || name === 'N') return 'N';
+  if (name.endsWith('min')) return name.slice(0, -3) + 'm';
+  if (name.endsWith('maj')) return name.slice(0, -3);
+  return name;
+}
+
 // ── Module-level state ────────────────────────────────────────────────────────
 
 const _bufCache = new Map();       // url → ArrayBuffer
@@ -538,7 +546,40 @@ function _buildEditor(container, gen, mashup, store) {
       st.textContent = `${shift > 0 ? '+' : ''}${shift}st`;
       metaEl.appendChild(st);
 
+      // Pitch nudge buttons (−1 / +1 semitone post-generation)
+      const pitchDownBtn = document.createElement('button');
+      pitchDownBtn.type = 'button';
+      pitchDownBtn.className = 'btn btn-ghost stem-editor__pitch-btn';
+      pitchDownBtn.title = 'Shift pitch down 1 semitone (re-render to apply)';
+      pitchDownBtn.textContent = '−st';
+      pitchDownBtn.addEventListener('click', () => {
+        const cur = getTrackEdit(store.getState().mashup.generation, track.id);
+        applyEdit(store, track.id, { pitch_shift: (cur.pitch_shift ?? 0) - 1 });
+      });
+      const pitchUpBtn = document.createElement('button');
+      pitchUpBtn.type = 'button';
+      pitchUpBtn.className = 'btn btn-ghost stem-editor__pitch-btn';
+      pitchUpBtn.title = 'Shift pitch up 1 semitone (re-render to apply)';
+      pitchUpBtn.textContent = '+st';
+      pitchUpBtn.addEventListener('click', () => {
+        const cur = getTrackEdit(store.getState().mashup.generation, track.id);
+        applyEdit(store, track.id, { pitch_shift: (cur.pitch_shift ?? 0) + 1 });
+      });
+      metaEl.appendChild(pitchDownBtn);
+      metaEl.appendChild(pitchUpBtn);
+
       rowLabel.appendChild(metaEl);
+
+      if (analysis.midi_path) {
+        const base = window.MASHUP_API_BASE || 'http://127.0.0.1:8000';
+        const midiLink = document.createElement('a');
+        midiLink.className = 'stem-editor__midi-link';
+        midiLink.href = `${base}${analysis.midi_path}`;
+        midiLink.download = '';
+        midiLink.title = 'Download MIDI transcription for this track';
+        midiLink.textContent = '↓ MIDI';
+        rowLabel.appendChild(midiLink);
+      }
     }
 
     row.appendChild(rowLabel);
@@ -572,6 +613,25 @@ function _buildEditor(container, gen, mashup, store) {
     clip.appendChild(waveCanvas);
     clip.appendChild(rightHandle);
     lane.appendChild(clip);
+
+    // ── Chord markers ───────────────────────────────────────────────────────
+    const chords = analysis?.chords;
+    if (chords?.length) {
+      chords.forEach(({ time_sec, chord }) => {
+        if (time_sec < 0) return;
+        const marker = document.createElement('div');
+        marker.className = 'stem-editor__chord-marker';
+        const isMinor = chord.endsWith('min');
+        const isNone  = chord === 'N';
+        marker.classList.add(isNone ? 'chord--none' : isMinor ? 'chord--minor' : 'chord--major');
+        marker.style.left = `${time_sec * pxPerSec}px`;
+        const label = document.createElement('span');
+        label.className = 'stem-editor__chord-label';
+        label.textContent = formatChord(chord);
+        marker.appendChild(label);
+        lane.appendChild(marker);
+      });
+    }
 
     // ── Start-time input ────────────────────────────────────────────────────
     const offsetWrap = document.createElement('div');

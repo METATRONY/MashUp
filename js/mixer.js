@@ -17,6 +17,7 @@ import {
   keyCompatibility,
   vibeCompatibility,
   worstBpmStretch,
+  safeBpmRange,
   smartDefaultBpm,
   toCamelot,
 } from './compatibility.js';
@@ -250,13 +251,17 @@ function renderCompatibilityPanel(trackedSongs, targetBpm) {
   const hasBpmData = trackedSongs.some((s) => s.bpm);
   const bpmCls = worstPct > 15 ? 'compat--bad' : worstPct > 10 ? 'compat--warn' : 'compat--good';
   const bpmTitle = worstSong ? `${worstSong.title || ''} (${worstSong.bpm} BPM)` : '';
-  const bpmLabel = worstPct > 15
+  let bpmLabel = worstPct > 15
     ? `BPM: ${worstPct}% stretch — exceeds quality limit`
     : worstPct > 10
     ? `BPM: ${worstPct}% stretch — borderline`
     : worstPct > 0
     ? `BPM: ${worstPct}% stretch`
     : 'BPM: perfect match';
+  if (worstPct > 10) {
+    const range = safeBpmRange(trackedSongs);
+    if (range) bpmLabel += ` · Safe: ${range.min}–${range.max} BPM`;
+  }
   const bpmHtml = hasBpmData
     ? `<span class="mashup-key-badge ${bpmCls}" title="${escapeHtml(bpmTitle)}">${bpmLabel}</span>`
     : '';
@@ -553,6 +558,38 @@ export function initMixer(store) {
     store.updateMashup({ bpm: v });
   });
 
+  // BPM ÷2 / ×2 on transport
+  function setTransportBpm(newBpm) {
+    const v = Math.min(300, Math.max(40, Math.round(newBpm)));
+    if (bpmInput) bpmInput.value = String(v);
+    userSetBpm = true;
+    store.updateMashup({ bpm: v });
+  }
+  document.getElementById('bpm-half-btn')?.addEventListener('click', () => {
+    setTransportBpm((store.getState().mashup.bpm ?? 120) / 2);
+  });
+  document.getElementById('bpm-double-btn')?.addEventListener('click', () => {
+    setTransportBpm((store.getState().mashup.bpm ?? 120) * 2);
+  });
+
+  // Tap Tempo — average interval across last 4 taps
+  const _tapTimes = [];
+  document.getElementById('bpm-tap-btn')?.addEventListener('click', () => {
+    const now = Date.now();
+    _tapTimes.push(now);
+    if (_tapTimes.length > 4) _tapTimes.shift();
+    if (_tapTimes.length >= 2) {
+      const intervals = [];
+      for (let i = 1; i < _tapTimes.length; i++) intervals.push(_tapTimes[i] - _tapTimes[i - 1]);
+      const avgMs = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+      setTransportBpm(60000 / avgMs);
+    }
+    // Reset if more than 2 seconds pass between taps
+    setTimeout(() => {
+      if (_tapTimes.length && Date.now() - _tapTimes[_tapTimes.length - 1] > 2000) _tapTimes.length = 0;
+    }, 2100);
+  });
+
   store.subscribe((state) => {
     if (userSetBpm) return;
     const trackedSongs = state.mashup.tracks
@@ -573,6 +610,48 @@ export function initMixer(store) {
 
   genBtn?.addEventListener('click', () => startMashupGeneration(store));
   sampleBtn?.addEventListener('click', () => startMashupGeneration(store, { sample: true }));
+
+  // Auto-assign: assign each component to the track that scores best for it
+  const autoAssignBtn = document.getElementById('auto-assign-btn');
+  autoAssignBtn?.addEventListener('click', () => {
+    const state = store.getState();
+    const sorted = sortedTracks(state.mashup.tracks);
+    if (sorted.length === 0) return;
+
+    const trackSongPairs = sorted.map((t) => ({
+      id: t.id,
+      song: state.songs.find((s) => s.id === t.songId) || null,
+    }));
+
+    // Clear all current assignments first (so exclusivity checks pass cleanly)
+    sorted.forEach((t) => store.updateTrackComponents(t.id, []));
+
+    const suggestions = computeRelativeSuggestions(trackSongPairs);
+    // Track which components have been assigned
+    const assigned = new Set();
+
+    // Assign winning components per track
+    for (const { id } of trackSongPairs) {
+      const wins = [...(suggestions.get(id) || [])].filter((c) => !assigned.has(c));
+      wins.forEach((c) => assigned.add(c));
+      if (wins.length > 0) store.updateTrackComponents(id, wins);
+    }
+
+    // Any track with no assignments gets "other" as a fallback
+    const freshTracks = store.getState().mashup.tracks;
+    for (const t of freshTracks) {
+      if ((t.claimedComponents || []).length === 0) {
+        store.updateTrackComponents(t.id, ['other']);
+      }
+    }
+    showToast('Components auto-assigned based on each song\'s energy and vibe.', 'info');
+  });
+
+  // Keep auto-assign button enabled only when there are tracks
+  store.subscribe((state) => {
+    if (!autoAssignBtn) return;
+    autoAssignBtn.disabled = state.mashup.tracks.length === 0;
+  });
 
   document.getElementById('karaoke-btn')?.addEventListener('click', async () => {
     const { openKaraokeModal } = await import('./voice.js');
