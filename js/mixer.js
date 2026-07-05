@@ -516,6 +516,10 @@ export function setupKeyboardShortcuts() {
 
 // ── initMixer ─────────────────────────────────────────────────────────────────
 
+export function resetBpmOverride() {
+  userSetBpm = false;
+}
+
 export function initMixer(store) {
   const playBtn = document.getElementById('play-btn');
   const stopBtn = document.getElementById('stop-btn');

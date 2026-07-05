@@ -486,6 +486,29 @@
     </div>
   </div>
 
-  <script type="module" src="js/app.js?v=48"></script>
+  <!-- Remix Style Modal -->
+  <div class="remix-overlay" id="remix-overlay" hidden>
+    <div class="remix-dialog" role="dialog" aria-modal="true" aria-labelledby="remix-dialog-title">
+      <div class="remix-dialog__header">
+        <div>
+          <h3 class="remix-dialog__title" id="remix-dialog-title">Remix Style</h3>
+          <p class="remix-dialog__subtitle" id="remix-dialog-subtitle"></p>
+        </div>
+        <button type="button" class="remix-close-btn" id="remix-close-btn" aria-label="Close">&times;</button>
+      </div>
+      <div class="remix-loading" id="remix-loading" hidden>
+        <div class="remix-spinner"></div>
+        <span>Searching for covers…</span>
+      </div>
+      <p class="remix-error" id="remix-error" hidden></p>
+      <div class="remix-grid" id="remix-grid"></div>
+      <div class="remix-dialog__footer">
+        <button type="button" class="btn btn-secondary" id="remix-cancel-btn">Cancel</button>
+        <button type="button" class="btn btn-primary" id="remix-use-btn" hidden>Use Style</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js?v=50"></script>
 </body>
 </html>

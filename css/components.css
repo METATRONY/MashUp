@@ -637,3 +637,94 @@
 .catalog-add-btn { flex-shrink: 0; font-size: 0.7rem !important; padding: 0.25rem 0.65rem !important; }
 .catalog-add-btn.in-lib { color: var(--text-muted) !important; border-color: var(--border) !important; }
 .catalog-loading { color: var(--text-muted); font-size: 0.875rem; padding: var(--space-lg); text-align: center; }
+
+/* ── Remix Style Modal ─────────────────────────────────────────── */
+.remix-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.55); backdrop-filter: blur(8px);
+}
+.remix-dialog {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius-2xl);
+  width: min(680px, calc(100vw - 2rem)); max-height: 90vh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.remix-dialog__header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: var(--space-lg) var(--space-lg) var(--space-md);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.remix-dialog__title { font-size: 1rem; font-weight: 700; margin: 0; }
+.remix-dialog__subtitle { font-size: 0.78rem; color: var(--text-muted); margin: 2px 0 0; }
+.remix-close-btn {
+  background: none; border: none; font-size: 1.4rem; cursor: pointer;
+  color: var(--text-secondary); padding: 2px 6px; line-height: 1; flex-shrink: 0;
+}
+.remix-loading {
+  display: flex; align-items: center; gap: var(--space-sm);
+  padding: var(--space-lg); color: var(--text-muted); font-size: 0.85rem; flex-shrink: 0;
+}
+.remix-spinner {
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid var(--border); border-top-color: var(--accent-violet);
+  animation: spin .7s linear infinite; flex-shrink: 0;
+}
+.remix-error {
+  padding: var(--space-md) var(--space-lg);
+  color: #ef4444; font-size: 0.85rem; flex-shrink: 0;
+}
+.remix-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: var(--space-sm); padding: var(--space-md); overflow-y: auto;
+}
+.remix-card {
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--bg-page); overflow: hidden; cursor: pointer;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.remix-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
+.remix-card--selected { border-color: var(--accent-violet); box-shadow: 0 0 0 2px var(--accent-violet); }
+.remix-card--original { opacity: 0.6; }
+.remix-card__art {
+  position: relative; aspect-ratio: 1; background: var(--bg-muted); overflow: hidden;
+}
+.remix-card__art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.remix-card__play {
+  position: absolute; bottom: 4px; right: 4px;
+  background: rgba(0,0,0,.65); border: none; border-radius: 50%;
+  width: 26px; height: 26px; cursor: pointer; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.65rem; transition: background var(--transition-fast);
+}
+.remix-card__play:hover, .remix-card__play--playing { background: var(--accent-violet); }
+.remix-card__body { padding: 5px 7px 7px; }
+.remix-card__artist { font-size: 0.68rem; font-weight: 700; color: var(--accent-violet); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.remix-card__source { font-size: 0.6rem; color: var(--text-muted); }
+.remix-card__original-badge {
+  display: inline-block; font-size: 0.58rem; font-weight: 700;
+  background: rgba(13,148,136,.15); color: #0d9488;
+  padding: 1px 5px; border-radius: 4px; margin-top: 2px;
+}
+.remix-dialog__footer {
+  display: flex; justify-content: flex-end; gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg); border-top: 1px solid var(--border); flex-shrink: 0;
+}
+
+/* Remix Style button on song card */
+.song-card__remix-btn { font-size: 0.7rem !important; padding: 0.2rem 0.55rem !important; gap: 4px !important; }
+
+/* Inline status text in remix footer */
+.remix-status { font-size: 0.78rem; color: var(--text-muted); margin-right: auto; display: flex; align-items: center; gap: 6px; }
+.remix-status::before {
+  content: ''; display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid var(--border); border-top-color: var(--accent-violet);
+  animation: spin .7s linear infinite; flex-shrink: 0;
+}
+
+/* Generate button pulse after remix config */
+@keyframes remix-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(109,40,217,0.5); }
+  50%       { box-shadow: 0 0 0 8px rgba(109,40,217,0); }
+}
+.remix-btn-pulse { animation: remix-pulse 0.6s ease 3; }

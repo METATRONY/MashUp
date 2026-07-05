@@ -240,6 +240,106 @@ def beat_align_tracks(
     return aligned
 
 
+def _first_vocal_onset(audio: np.ndarray, sr: int, hop: int = 512) -> int:
+    """
+    Return sample index of the first true vocal onset.
+    Uses 15% of peak RMS to avoid Demucs instrument-leakage being mistaken for singing.
+    Returns 0 if no onset found.
+    """
+    from scipy.ndimage import uniform_filter1d
+    import librosa
+
+    if audio is None or audio.size == 0:
+        return 0
+    rms = librosa.feature.rms(y=audio, frame_length=2048, hop_length=hop)[0]
+    rms_s = uniform_filter1d(rms.astype(np.float64), size=15)
+    peak = rms_s.max()
+    if peak == 0:
+        return 0
+    above = np.where(rms_s > peak * 0.15)[0]
+    return int(above[0] * hop) if len(above) else 0
+
+
+def vocal_onset_align(
+    vocal_stems: dict[str, np.ndarray],
+    backing_stems_list: list[dict[str, np.ndarray]],
+    sr: int = 44100,
+    target_bpm: float = 80.0,
+) -> tuple[dict[str, np.ndarray], list[dict[str, np.ndarray]]]:
+    """
+    Intro alignment for remix: detect where each artist's vocals first appear, then
+    trim whichever track has the longer silent intro so both start singing at the
+    same timeline position (rounded to the nearest bar boundary).
+
+    Returns (possibly_trimmed_vocal_stems, possibly_trimmed_backing_stems_list).
+    Called only in remix mode (one vocals-only track + one or more backing tracks).
+    """
+    try:
+        original_vocals = vocal_stems.get("vocals")
+        if original_vocals is None or original_vocals.size == 0:
+            logger.info("Vocal onset align: no original vocals, skipping")
+            return vocal_stems, backing_stems_list
+
+        bar_period = int(round(sr * 60.0 / target_bpm)) * 4
+
+        result_vocals = vocal_stems
+        result_backing: list[dict[str, np.ndarray]] = []
+
+        for backing_stems in backing_stems_list:
+            cover_vocals = backing_stems.get("vocals")
+            if cover_vocals is None or cover_vocals.size == 0:
+                logger.info("Vocal onset align: cover has no vocals channel, skipping")
+                result_backing.append(backing_stems)
+                continue
+
+            t_orig = _first_vocal_onset(original_vocals, sr)
+            t_cover = _first_vocal_onset(cover_vocals, sr)
+
+            logger.info(
+                "Vocal onset align: original onset=%.2fs  cover onset=%.2fs",
+                t_orig / sr, t_cover / sr,
+            )
+
+            delta = t_orig - t_cover  # positive = original has a longer intro
+
+            if abs(delta) < bar_period // 2:
+                logger.info("Vocal onset align: already within half a bar, skipping")
+                result_backing.append(backing_stems)
+                continue
+
+            n_bars = round(delta / bar_period)
+            trim = n_bars * bar_period
+
+            if trim > 0:
+                # Original has a longer intro — trim that many samples from the vocal stems
+                logger.info(
+                    "Vocal onset align: trimming %d bars (%.2fs) from original vocal intro",
+                    n_bars, trim / sr,
+                )
+                result_vocals = {
+                    name: arr[trim:].copy() if len(arr) > trim else arr
+                    for name, arr in result_vocals.items()
+                }
+                result_backing.append(backing_stems)
+            else:
+                # Cover has a longer intro — trim the backing instead
+                trim_abs = abs(trim)
+                logger.info(
+                    "Vocal onset align: trimming %d bars (%.2fs) from cover backing intro",
+                    abs(n_bars), trim_abs / sr,
+                )
+                result_backing.append({
+                    name: arr[trim_abs:].copy() if len(arr) > trim_abs else arr
+                    for name, arr in backing_stems.items()
+                })
+
+        return result_vocals, result_backing
+
+    except Exception as exc:
+        logger.warning("Vocal onset alignment failed: %s", exc)
+        return vocal_stems, backing_stems_list
+
+
 def find_best_entry_point(
     exit_drums: np.ndarray,
     entry_stems: dict[str, np.ndarray],
@@ -492,8 +592,14 @@ def pitch_shift_stems(
         use_formant = name in _VOCAL_STEMS
         try:
             import pyrubberband as rb
-            rbargs = ["--formant"] if use_formant else []
-            shifted[name] = rb.pitch_shift(mono, sr, semitones, rbargs=rbargs)
+            if use_formant:
+                # Try dict-style rbargs (pyrubberband ≥ 0.3); fall back to no-formant on failure
+                try:
+                    shifted[name] = rb.pitch_shift(mono, sr, semitones, rbargs={"--formant": None})
+                except Exception:
+                    shifted[name] = rb.pitch_shift(mono, sr, semitones)
+            else:
+                shifted[name] = rb.pitch_shift(mono, sr, semitones)
         except ImportError:
             try:
                 import librosa

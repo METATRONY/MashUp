@@ -268,9 +268,15 @@ function buildSongCard(song, store) {
         </div>
         ${suggestHtml}
         ${lyricsHtml}
-        <button type="button" class="btn btn-icon btn-ghost remove-song-btn" data-song-id="${song.id}" title="Remove from library" style="align-self:flex-start;margin-top:4px">
-          <svg width="16" height="16"><use href="#icon-trash"/></svg>
-        </button>
+        <div style="display:flex;gap:6px;margin-top:4px;align-items:center;flex-wrap:wrap">
+          <button type="button" class="btn btn-sm btn-ghost song-card__remix-btn" data-song-id="${song.id}" title="Browse covers and remix in a different style">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+            Remix Style
+          </button>
+          <button type="button" class="btn btn-icon btn-ghost remove-song-btn" data-song-id="${song.id}" title="Remove from library">
+            <svg width="16" height="16"><use href="#icon-trash"/></svg>
+          </button>
+        </div>
       </div>
     </div>
   `;
@@ -294,6 +300,11 @@ function buildSongCard(song, store) {
   card.addEventListener('dragend', () => card.classList.remove('song-card--dragging'));
 
   card.querySelector('.add-to-mixer-btn')?.addEventListener('click', () => addSongToMixer(store, song.id));
+
+  card.querySelector('.song-card__remix-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    window.openRemixModal?.(song.id);
+  });
 
   // BPM ÷2 / ×2 correction buttons — fix common librosa octave-detection errors
   if (song.bpm) {

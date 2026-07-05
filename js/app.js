@@ -9,6 +9,7 @@ import { initAudio, setMashupResultUrl } from './audio.js';
 import { initCatalog } from './catalog.js';
 import { camelotDistance, bpmStretchPct } from './compatibility.js';
 import { initVoiceModal } from './voice.js';
+import { initRemix } from './remix.js';
 
 // Create the global store
 const store = createStore();
@@ -38,6 +39,9 @@ initMixer(store);
 
 // Initialize voice replace modal
 initVoiceModal(store);
+
+// Initialize remix style browser
+initRemix(store);
 
 // Wire result audio element and waveform animation
 initAudio(store);

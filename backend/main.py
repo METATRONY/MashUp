@@ -46,7 +46,7 @@ from .mix_audio import assemble_mix, build_dj_mix, wav_to_mp3, write_wav
 from .separate import run_demucs
 from .stem_cache import load as stem_cache_load, save as stem_cache_save
 from . import metadata_cache
-from .tempo_match import detect_bpm, detect_key_from_audio, time_stretch_stems, pitch_shift_stems, semitone_distance, beat_align_tracks
+from .tempo_match import detect_bpm, detect_key_from_audio, time_stretch_stems, pitch_shift_stems, semitone_distance, beat_align_tracks, vocal_onset_align
 from .voice_process import VOICES_DIR, save_voice_upload, prepare_voice_stem, load_voice_as_array, append_training_clip
 from .voice_convert import convert_voice_safe
 
@@ -342,6 +342,24 @@ def run_pipeline(job_id: str, payload: dict) -> None:
         aligned_stems = beat_align_tracks(stems_list, target_bpm)
         for t, aligned in zip(track_inputs, aligned_stems):
             t["stems"] = aligned
+
+        # Vocal onset alignment: in remix mode (one track = vocals only),
+        # detect vocal onset in both original and cover, then trim whichever
+        # has the longer silent intro so both start singing at the same time.
+        _vocal_only = [t for t in track_inputs if set(t["components"]) == {"vocals"} and not t["muted"]]
+        if _vocal_only and req.mode != "dj":
+            _backing = [t for t in track_inputs if t["track_id"] != _vocal_only[0]["track_id"] and not t["muted"]]
+            if _backing:
+                _new_vocal_stems, _new_backs = vocal_onset_align(
+                    _vocal_only[0]["stems"],
+                    [t["stems"] for t in _backing],
+                    sr=44100,
+                    target_bpm=target_bpm,
+                )
+                _vocal_only[0]["stems"] = _new_vocal_stems
+                for t, new_stems in zip(_backing, _new_backs):
+                    t["stems"] = new_stems
+                print(f"[{job_id}] Vocal onset alignment applied to {len(_backing)} backing track(s)", flush=True)
 
         # Export per-stem WAVs for the timeline editor — written AFTER beat-align
         # (so phases are correct) and BEFORE length-equalize (so the full stem
@@ -954,6 +972,37 @@ def search_yt(artist: str = Query(default=""), title: str = Query(default="", mi
     if not vid:
         raise HTTPException(status_code=404, detail="No video found on YouTube")
     return {"video_id": vid}
+
+
+@app.get("/api/search-covers")
+def search_covers(
+    title: str = Query(..., min_length=1),
+    artist: str = Query(default=""),
+    limit: int = Query(default=20, ge=1, le=50),
+):
+    """Proxy Deezer search to find cover versions of a song (avoids browser CORS)."""
+    import urllib.request as _ur
+    import urllib.parse as _up
+    q = _up.quote(f"{title} {artist}".strip())
+    url = f"https://api.deezer.com/search?q={q}&limit={limit}"
+    try:
+        with _ur.urlopen(url, timeout=6) as r:
+            data = json.loads(r.read())
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Deezer unavailable: {exc}")
+    covers = [
+        {
+            "id": t["id"],
+            "title": t["title"],
+            "artist": t["artist"]["name"],
+            "album": t["album"]["title"],
+            "cover": t["album"]["cover_medium"],
+            "preview": t["preview"],
+        }
+        for t in data.get("data", [])
+        if t.get("preview")
+    ]
+    return {"covers": covers}
 
 
 @app.get("/api/health")
